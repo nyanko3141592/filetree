@@ -1,0 +1,26 @@
+[package]
+name = "filetree"
+version = "0.1.0"
+edition = "2021"
+description = "A VSCode-like file explorer TUI"
+authors = ["nyanko3141592"]
+license = "MIT"
+repository = "https://github.com/nyanko3141592/filetree"
+keywords = ["tui", "file-manager", "terminal", "cli"]
+categories = ["command-line-utilities"]
+
+[[bin]]
+name = "ft"
+path = "src/main.rs"
+
+[dependencies]
+ratatui = "0.28"
+crossterm = "0.28"
+anyhow = "1.0"
+arboard = "3.4"
+
+[profile.release]
+lto = true
+strip = true
+opt-level = "z"
+codegen-units = 1
