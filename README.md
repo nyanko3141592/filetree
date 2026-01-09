@@ -1,79 +1,94 @@
 # ft - File Tree Explorer
 
-A VSCode-like file explorer TUI written in Rust.
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![Rust](https://img.shields.io/badge/Rust-1.70%2B-orange.svg)](https://www.rust-lang.org/)
+
+A fast, lightweight file explorer TUI with VSCode-like interface and Vim keybindings.
+
+![ft demo](https://via.placeholder.com/800x400?text=Demo+Screenshot)
+
+## Features
+
+- **Vim-style navigation** - `hjkl` keys, `g`/`G` for jump
+- **Mouse support** - Click, double-click, scroll
+- **File operations** - Copy, cut, paste, delete, rename
+- **Multi-select** - Mark multiple files with `Space`
+- **Quick search** - Incremental search with `/`
+- **Path copying** - Copy file path to system clipboard
+- **File icons** - Beautiful icons with Nerd Fonts
 
 ## Installation
 
 ### From source
 
 ```bash
+git clone https://github.com/nyanko3141592/filetree.git
+cd filetree
 cargo install --path .
 ```
 
-This installs the `ft` command to `~/.cargo/bin/`.
-
-### Manual build
+### Build manually
 
 ```bash
 cargo build --release
-# Binary is at ./target/release/ft
+# Binary: ./target/release/ft
 ```
 
 ## Usage
 
 ```bash
-ft              # Open current directory
-ft /path/to/dir # Open specific directory
+ft              # Current directory
+ft ~/Documents  # Specific directory
 ```
 
-## Key Bindings
+## Keybindings
+
+### Navigation
 
 | Key | Action |
 |-----|--------|
-| `j` / `k` / `Arrow` | Move up/down |
-| `l` / `Enter` | Expand folder / Select file |
-| `h` / `Backspace` | Collapse folder / Go to parent |
+| `j` / `k` | Move down / up |
+| `l` / `Enter` | Expand directory |
+| `h` / `Backspace` | Collapse / Go to parent |
+| `g` / `G` | Jump to top / bottom |
 | `Tab` | Toggle expand/collapse |
-| `g` / `G` | Jump to top/bottom |
-| `Space` | Mark/unmark for multi-select |
-| `c` | **Copy path to clipboard** |
-| `C` | **Copy filename to clipboard** |
-| `y` | Yank (copy file) |
-| `d` | Cut (for move) |
+
+### File Operations
+
+| Key | Action |
+|-----|--------|
+| `Space` | Mark/unmark file |
+| `y` | Yank (copy) |
+| `d` | Cut |
 | `p` | Paste |
-| `D` / `Delete` | Delete |
+| `D` | Delete |
 | `r` | Rename |
-| `a` | New file |
-| `A` | New directory |
+| `a` / `A` | New file / directory |
+
+### Other
+
+| Key | Action |
+|-----|--------|
+| `c` / `C` | Copy path / filename to clipboard |
 | `/` | Search |
-| `n` | Next search result |
-| `R` / `F5` | Refresh |
+| `n` | Next match |
+| `R` | Refresh |
 | `?` | Help |
 | `q` | Quit |
 
-## Mouse Operations
+## Mouse
 
 | Action | Effect |
 |--------|--------|
-| Click | Select item |
-| Double-click | Expand/collapse folder |
-| Scroll up/down | Navigate up/down |
-
-## Features
-
-- File tree navigation with Vim-like keybindings
-- **Mouse support** (click, double-click, scroll)
-- **Copy file path to clipboard** (`c` key)
-- File operations: copy, move, delete, rename, create
-- Multi-file selection with Space key
-- Cut & paste as drag-and-drop alternative
-- File search
-- File type icons (requires Nerd Font)
+| Click | Select |
+| Double-click | Expand/collapse |
+| Scroll | Navigate |
 
 ## Requirements
 
+- Rust 1.70+
 - Terminal with UTF-8 support
-- Nerd Font recommended for icons
+- [Nerd Font](https://www.nerdfonts.com/) (recommended for icons)
 
 ## License
 
