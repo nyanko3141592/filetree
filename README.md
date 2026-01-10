@@ -5,15 +5,16 @@
 
 A fast, lightweight file explorer TUI with VSCode-like interface and Vim keybindings.
 
-![ft demo](https://via.placeholder.com/800x400?text=Demo+Screenshot)
-
 ## Features
 
+- **Git status display** - Color-coded file status (modified, untracked, ignored)
 - **Vim-style navigation** - `hjkl` keys, `g`/`G` for jump
 - **Mouse support** - Click, double-click, scroll
 - **File operations** - Copy, cut, paste, delete, rename
 - **Multi-select** - Mark multiple files with `Space`
 - **Quick search** - Incremental search with `/`
+- **Open in editor** - Launch files in `$EDITOR`
+- **Hidden files toggle** - Show/hide dotfiles with `.`
 - **Path copying** - Copy file path to system clipboard
 - **File icons** - Beautiful icons with Nerd Fonts
 
@@ -52,6 +53,8 @@ ft ~/Documents  # Specific directory
 | `h` / `Backspace` | Collapse / Go to parent |
 | `g` / `G` | Jump to top / bottom |
 | `Tab` | Toggle expand/collapse |
+| `H` | Collapse all |
+| `L` | Expand all |
 
 ### File Operations
 
@@ -64,6 +67,14 @@ ft ~/Documents  # Specific directory
 | `D` | Delete |
 | `r` | Rename |
 | `a` / `A` | New file / directory |
+| `o` | Open in $EDITOR |
+
+### View
+
+| Key | Action |
+|-----|--------|
+| `.` | Toggle hidden files |
+| `R` | Refresh |
 
 ### Other
 
@@ -72,7 +83,6 @@ ft ~/Documents  # Specific directory
 | `c` / `C` | Copy path / filename to clipboard |
 | `/` | Search |
 | `n` | Next match |
-| `R` | Refresh |
 | `?` | Help |
 | `q` | Quit |
 
@@ -83,6 +93,16 @@ ft ~/Documents  # Specific directory
 | Click | Select |
 | Double-click | Expand/collapse |
 | Scroll | Navigate |
+
+## Git Status Colors
+
+| Color | Status |
+|-------|--------|
+| Green | New / Untracked |
+| Yellow | Modified |
+| Red | Deleted |
+| Cyan | Renamed |
+| Gray | Ignored |
 
 ## Requirements
 

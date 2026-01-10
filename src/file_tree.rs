@@ -29,7 +29,7 @@ impl FileNode {
         }
     }
 
-    pub fn load_children(&mut self) -> anyhow::Result<()> {
+    pub fn load_children(&mut self, show_hidden: bool) -> anyhow::Result<()> {
         if !self.is_dir {
             return Ok(());
         }
@@ -37,6 +37,17 @@ impl FileNode {
         self.children.clear();
         let mut entries: Vec<_> = fs::read_dir(&self.path)?
             .filter_map(|e| e.ok())
+            .filter(|e| {
+                if show_hidden {
+                    true
+                } else {
+                    // Filter out hidden files (starting with .)
+                    e.file_name()
+                        .to_str()
+                        .map(|s| !s.starts_with('.'))
+                        .unwrap_or(true)
+                }
+            })
             .collect();
 
         entries.sort_by(|a, b| {
@@ -56,14 +67,14 @@ impl FileNode {
         Ok(())
     }
 
-    pub fn toggle_expand(&mut self) -> anyhow::Result<()> {
+    pub fn toggle_expand(&mut self, show_hidden: bool) -> anyhow::Result<()> {
         if !self.is_dir {
             return Ok(());
         }
 
         self.expanded = !self.expanded;
         if self.expanded && self.children.is_empty() {
-            self.load_children()?;
+            self.load_children(show_hidden)?;
         }
         Ok(())
     }
@@ -74,18 +85,20 @@ pub struct FileTree {
     pub root: FileNode,
     pub flat_list: Vec<usize>,
     nodes: Vec<FileNode>,
+    pub show_hidden: bool,
 }
 
 impl FileTree {
-    pub fn new(path: &Path) -> anyhow::Result<Self> {
+    pub fn new(path: &Path, show_hidden: bool) -> anyhow::Result<Self> {
         let mut root = FileNode::new(path.to_path_buf(), 0);
         root.expanded = true;
-        root.load_children()?;
+        root.load_children(show_hidden)?;
 
         let mut tree = Self {
             root,
             flat_list: Vec::new(),
             nodes: Vec::new(),
+            show_hidden,
         };
         tree.rebuild_flat_list();
         Ok(tree)
@@ -132,7 +145,7 @@ impl FileTree {
 
     fn toggle_expand_recursive(&mut self, node: &mut FileNode, target_path: &Path) -> anyhow::Result<bool> {
         if node.path == target_path {
-            node.toggle_expand()?;
+            node.toggle_expand(self.show_hidden)?;
             self.update_root(node.clone());
             return Ok(true);
         }
@@ -170,8 +183,45 @@ impl FileTree {
         let root_path = self.root.path.clone();
         self.root = FileNode::new(root_path, 0);
         self.root.expanded = true;
-        self.root.load_children()?;
+        self.root.load_children(self.show_hidden)?;
         self.rebuild_flat_list();
+        Ok(())
+    }
+
+    pub fn set_show_hidden(&mut self, show_hidden: bool) -> anyhow::Result<()> {
+        self.show_hidden = show_hidden;
+        self.refresh()
+    }
+
+    pub fn collapse_all(&mut self) {
+        Self::collapse_all_recursive(&mut self.root);
+        self.root.expanded = true; // Keep root expanded
+        self.rebuild_flat_list();
+    }
+
+    fn collapse_all_recursive(node: &mut FileNode) {
+        node.expanded = false;
+        for child in &mut node.children {
+            Self::collapse_all_recursive(child);
+        }
+    }
+
+    pub fn expand_all(&mut self) -> anyhow::Result<()> {
+        Self::expand_all_recursive(&mut self.root, self.show_hidden)?;
+        self.rebuild_flat_list();
+        Ok(())
+    }
+
+    fn expand_all_recursive(node: &mut FileNode, show_hidden: bool) -> anyhow::Result<()> {
+        if node.is_dir {
+            node.expanded = true;
+            if node.children.is_empty() {
+                node.load_children(show_hidden)?;
+            }
+            for child in &mut node.children {
+                Self::expand_all_recursive(child, show_hidden)?;
+            }
+        }
         Ok(())
     }
 
@@ -196,17 +246,17 @@ impl FileTree {
     }
 
     fn expand_path(&mut self, target_path: &Path) -> anyhow::Result<()> {
-        Self::expand_path_recursive(&mut self.root, target_path)?;
+        Self::expand_path_recursive(&mut self.root, target_path, self.show_hidden)?;
         self.rebuild_flat_list();
         Ok(())
     }
 
-    fn expand_path_recursive(node: &mut FileNode, target_path: &Path) -> anyhow::Result<bool> {
+    fn expand_path_recursive(node: &mut FileNode, target_path: &Path, show_hidden: bool) -> anyhow::Result<bool> {
         if node.path == target_path {
             if !node.expanded {
                 node.expanded = true;
                 if node.children.is_empty() {
-                    node.load_children()?;
+                    node.load_children(show_hidden)?;
                 }
             }
             return Ok(true);
@@ -214,7 +264,7 @@ impl FileTree {
 
         if node.expanded {
             for child in &mut node.children {
-                if Self::expand_path_recursive(child, target_path)? {
+                if Self::expand_path_recursive(child, target_path, show_hidden)? {
                     return Ok(true);
                 }
             }

@@ -29,6 +29,8 @@ fn handle_normal_mode(app: &mut App, key: KeyEvent) {
         KeyCode::Enter | KeyCode::Char('l') => app.expand_current(),
         KeyCode::Backspace | KeyCode::Char('h') => app.collapse_current(),
         KeyCode::Tab => app.toggle_expand(),
+        KeyCode::Char('H') => app.collapse_all(),
+        KeyCode::Char('L') => app.expand_all(),
 
         // Marking
         KeyCode::Char(' ') => app.toggle_mark(),
@@ -58,9 +60,15 @@ fn handle_normal_mode(app: &mut App, key: KeyEvent) {
         // Refresh
         KeyCode::Char('R') | KeyCode::F(5) => app.refresh(),
 
+        // Toggle hidden files
+        KeyCode::Char('.') => app.toggle_hidden(),
+
         // Copy path to clipboard
         KeyCode::Char('c') => app.copy_path(),
         KeyCode::Char('C') => app.copy_filename(),
+
+        // Open in external editor
+        KeyCode::Char('o') => app.open_in_editor(),
 
         // Help
         KeyCode::Char('?') => {

@@ -1,8 +1,10 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 use crate::file_ops::{self, Clipboard, ClipboardContent};
 use crate::file_tree::FileTree;
+use crate::git_status::GitRepo;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum InputMode {
@@ -21,6 +23,7 @@ pub enum ConfirmAction {
 
 pub struct App {
     pub tree: FileTree,
+    pub git_repo: GitRepo,
     pub selected: usize,
     pub marked: HashSet<PathBuf>,
     pub clipboard: Clipboard,
@@ -32,13 +35,17 @@ pub struct App {
     pub tree_area_height: usize,
     pub last_click_time: std::time::Instant,
     pub last_click_index: Option<usize>,
+    pub show_hidden: bool,
 }
 
 impl App {
     pub fn new(path: &Path) -> anyhow::Result<Self> {
-        let tree = FileTree::new(path)?;
+        let show_hidden = false;
+        let tree = FileTree::new(path, show_hidden)?;
+        let git_repo = GitRepo::new(path);
         Ok(Self {
             tree,
+            git_repo,
             selected: 0,
             marked: HashSet::new(),
             clipboard: Clipboard::default(),
@@ -50,6 +57,7 @@ impl App {
             tree_area_height: 20,
             last_click_time: std::time::Instant::now(),
             last_click_index: None,
+            show_hidden,
         })
     }
 
@@ -352,8 +360,40 @@ impl App {
         } else {
             self.message = Some("Refreshed".to_string());
         }
+        self.git_repo.refresh(&self.tree.root.path);
         if self.selected >= self.tree.len() {
             self.selected = self.tree.len().saturating_sub(1);
+        }
+    }
+
+    pub fn toggle_hidden(&mut self) {
+        self.show_hidden = !self.show_hidden;
+        if let Err(e) = self.tree.set_show_hidden(self.show_hidden) {
+            self.message = Some(format!("Error: {}", e));
+        } else {
+            self.message = Some(if self.show_hidden {
+                "Showing hidden files".to_string()
+            } else {
+                "Hiding hidden files".to_string()
+            });
+        }
+        if self.selected >= self.tree.len() {
+            self.selected = self.tree.len().saturating_sub(1);
+        }
+    }
+
+    pub fn collapse_all(&mut self) {
+        self.tree.collapse_all();
+        self.selected = 0;
+        self.scroll_offset = 0;
+        self.message = Some("Collapsed all".to_string());
+    }
+
+    pub fn expand_all(&mut self) {
+        if let Err(e) = self.tree.expand_all() {
+            self.message = Some(format!("Error: {}", e));
+        } else {
+            self.message = Some("Expanded all".to_string());
         }
     }
 
@@ -387,6 +427,40 @@ impl App {
                 }
                 Err(_) => {
                     self.message = Some("Clipboard not available".to_string());
+                }
+            }
+        }
+    }
+
+    pub fn open_in_editor(&mut self) {
+        if let Some(node) = self.tree.get_node(self.selected) {
+            let path = node.path.clone();
+
+            // Try $EDITOR, then common editors
+            let editor = std::env::var("EDITOR")
+                .ok()
+                .or_else(|| std::env::var("VISUAL").ok())
+                .unwrap_or_else(|| {
+                    // Default editors by platform
+                    if cfg!(target_os = "macos") {
+                        "open".to_string()
+                    } else if cfg!(target_os = "windows") {
+                        "notepad".to_string()
+                    } else {
+                        "xdg-open".to_string()
+                    }
+                });
+
+            let result = Command::new(&editor)
+                .arg(&path)
+                .spawn();
+
+            match result {
+                Ok(_) => {
+                    self.message = Some(format!("Opened with {}", editor));
+                }
+                Err(e) => {
+                    self.message = Some(format!("Failed to open: {}", e));
                 }
             }
         }

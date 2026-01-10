@@ -1,6 +1,7 @@
 mod app;
 mod file_ops;
 mod file_tree;
+mod git_status;
 mod input;
 mod ui;
 

@@ -7,6 +7,7 @@ use ratatui::{
 };
 
 use crate::app::{App, ConfirmAction, InputMode};
+use crate::git_status::GitStatus;
 
 pub fn draw(frame: &mut Frame, app: &mut App) {
     let chunks = Layout::default()
@@ -53,6 +54,7 @@ fn draw_file_tree(frame: &mut Frame, app: &mut App, area: Rect) {
             let is_cut = app.clipboard.content.as_ref().map_or(false, |c| {
                 matches!(c, crate::file_ops::ClipboardContent::Cut(paths) if paths.contains(&node.path))
             });
+            let git_status = app.git_repo.get_status(&node.path);
 
             let mark_indicator = if is_marked { "*" } else { " " };
 
@@ -62,8 +64,24 @@ fn draw_file_tree(frame: &mut Frame, app: &mut App, area: Rect) {
             }
             if is_cut {
                 style = style.fg(Color::DarkGray);
-            } else if node.is_dir {
-                style = style.fg(Color::Blue);
+            } else {
+                // Apply git status color
+                style = style.fg(match git_status {
+                    GitStatus::Modified => Color::Yellow,
+                    GitStatus::Added => Color::Green,
+                    GitStatus::Untracked => Color::Green,
+                    GitStatus::Deleted => Color::Red,
+                    GitStatus::Renamed => Color::Cyan,
+                    GitStatus::Conflict => Color::Magenta,
+                    GitStatus::Ignored => Color::DarkGray,
+                    GitStatus::None => {
+                        if node.is_dir {
+                            Color::Blue
+                        } else {
+                            Color::Reset
+                        }
+                    }
+                });
             }
 
             let line = Line::from(vec![
