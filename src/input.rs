@@ -19,15 +19,33 @@ fn handle_normal_mode(app: &mut App, key: KeyEvent) {
         app.message = None;
     }
 
+    // Handle Ctrl+p for quick preview toggle
+    if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('p') {
+        app.toggle_quick_preview();
+        return;
+    }
+
     match key.code {
         // Quit
         KeyCode::Char('q') => app.should_quit = true,
 
-        // Navigation
-        KeyCode::Up | KeyCode::Char('k') => app.move_up(),
-        KeyCode::Down | KeyCode::Char('j') => app.move_down(),
-        KeyCode::Char('g') => app.move_to_top(),
-        KeyCode::Char('G') => app.move_to_bottom(),
+        // Navigation (update quick preview after movement)
+        KeyCode::Up | KeyCode::Char('k') => {
+            app.move_up();
+            app.update_quick_preview();
+        }
+        KeyCode::Down | KeyCode::Char('j') => {
+            app.move_down();
+            app.update_quick_preview();
+        }
+        KeyCode::Char('g') => {
+            app.move_to_top();
+            app.update_quick_preview();
+        }
+        KeyCode::Char('G') => {
+            app.move_to_bottom();
+            app.update_quick_preview();
+        }
 
         // Expand/Collapse
         KeyCode::Enter | KeyCode::Char('l') => app.expand_current(),
@@ -77,7 +95,7 @@ fn handle_normal_mode(app: &mut App, key: KeyEvent) {
 
         // Help
         KeyCode::Char('?') => {
-            app.message = Some("o:preview  c:path  C:name  y:yank  d:cut  p:paste  D:del  r:rename  a:file  A:dir  R:reload".to_string());
+            app.message = Some("o:preview  ^p:quick  c:path  C:name  y:yank  d:cut  p:paste  D:del  r:rename  a:file  A:dir".to_string());
         }
 
         // Buffer unknown chars for drop detection
@@ -101,13 +119,16 @@ pub fn handle_mouse_event(app: &mut App, mouse: MouseEvent) {
             // Tree area starts at row 1 (after border)
             if mouse.row > 0 {
                 app.handle_click(mouse.row - 1);
+                app.update_quick_preview();
             }
         }
         MouseEventKind::ScrollUp => {
             app.scroll_up(3);
+            app.update_quick_preview();
         }
         MouseEventKind::ScrollDown => {
             app.scroll_down(3);
+            app.update_quick_preview();
         }
         _ => {}
     }

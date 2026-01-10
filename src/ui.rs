@@ -15,16 +15,25 @@ pub fn draw(frame: &mut Frame, app: &mut App) -> usize {
         return draw_preview(frame, app);
     }
 
+    // Calculate layout based on quick preview state
+    let quick_preview_height = if app.quick_preview_enabled { 12 } else { 0 };
+
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Min(3),
+            Constraint::Length(quick_preview_height),
             Constraint::Length(3),
         ])
         .split(frame.area());
 
     draw_file_tree(frame, app, chunks[0]);
-    draw_status_bar(frame, app, chunks[1]);
+
+    if app.quick_preview_enabled {
+        draw_quick_preview(frame, app, chunks[1]);
+    }
+
+    draw_status_bar(frame, app, chunks[2]);
 
     // Draw input popup if in input mode
     match &app.input_mode {
@@ -147,6 +156,66 @@ fn draw_status_bar(frame: &mut Frame, app: &App, area: Rect) {
     let stats_widget = Paragraph::new(stats)
         .block(Block::default().borders(Borders::ALL));
     frame.render_widget(stats_widget, chunks[1]);
+}
+
+fn draw_quick_preview(frame: &mut Frame, app: &App, area: Rect) {
+    // If we have an image preview, render it
+    if let Some(img) = &app.quick_preview_image {
+        let title = app.quick_preview_path
+            .as_ref()
+            .map(|p| {
+                let name = p.file_name()
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or_default();
+                format!(" {} ({}x{}) [Ctrl+p: close] ", name, img.width, img.height)
+            })
+            .unwrap_or_else(|| " Quick Preview ".to_string());
+
+        let img_width = area.width.saturating_sub(2) as u32;
+        let img_height = (area.height.saturating_sub(2) * 2) as u32;
+
+        let lines = render_image_to_lines(img, img_width, img_height);
+
+        let preview = Paragraph::new(lines)
+            .block(Block::default().borders(Borders::ALL).title(title));
+
+        frame.render_widget(preview, area);
+        return;
+    }
+
+    let visible_height = area.height.saturating_sub(2) as usize;
+
+    let title = app.quick_preview_path
+        .as_ref()
+        .map(|p| {
+            let name = p.file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_default();
+            format!(" {} [Ctrl+p: close] ", name)
+        })
+        .unwrap_or_else(|| " Quick Preview ".to_string());
+
+    let lines: Vec<Line> = app.quick_preview_content
+        .iter()
+        .skip(app.quick_preview_scroll)
+        .take(visible_height)
+        .enumerate()
+        .map(|(i, line)| {
+            let line_num = app.quick_preview_scroll + i + 1;
+            Line::from(vec![
+                Span::styled(
+                    format!("{:4} ", line_num),
+                    Style::default().fg(Color::DarkGray),
+                ),
+                Span::raw(line.as_str()),
+            ])
+        })
+        .collect();
+
+    let preview = Paragraph::new(lines)
+        .block(Block::default().borders(Borders::ALL).title(title));
+
+    frame.render_widget(preview, area);
 }
 
 fn draw_input_popup(frame: &mut Frame, app: &App) {

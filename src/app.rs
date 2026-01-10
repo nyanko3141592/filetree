@@ -50,11 +50,17 @@ pub struct App {
     pub last_click_time: std::time::Instant,
     pub last_click_index: Option<usize>,
     pub show_hidden: bool,
-    // Preview mode state
+    // Preview mode state (full screen)
     pub preview_content: Vec<String>,
     pub preview_scroll: usize,
     pub preview_path: Option<PathBuf>,
     pub image_preview: Option<ImagePreview>,
+    // Quick preview panel (bottom panel, Quick Look style)
+    pub quick_preview_enabled: bool,
+    pub quick_preview_content: Vec<String>,
+    pub quick_preview_scroll: usize,
+    pub quick_preview_path: Option<PathBuf>,
+    pub quick_preview_image: Option<ImagePreview>,
     // Drop detection
     pub drop_buffer: String,
     pub last_char_time: std::time::Instant,
@@ -84,6 +90,11 @@ impl App {
             preview_scroll: 0,
             preview_path: None,
             image_preview: None,
+            quick_preview_enabled: false,
+            quick_preview_content: Vec::new(),
+            quick_preview_scroll: 0,
+            quick_preview_path: None,
+            quick_preview_image: None,
             drop_buffer: String::new(),
             last_char_time: std::time::Instant::now(),
         })
@@ -564,6 +575,106 @@ impl App {
         self.preview_path = None;
         self.preview_scroll = 0;
         self.image_preview = None;
+    }
+
+    pub fn toggle_quick_preview(&mut self) {
+        self.quick_preview_enabled = !self.quick_preview_enabled;
+        if self.quick_preview_enabled {
+            self.update_quick_preview();
+        } else {
+            self.quick_preview_content.clear();
+            self.quick_preview_path = None;
+            self.quick_preview_scroll = 0;
+            self.quick_preview_image = None;
+        }
+    }
+
+    pub fn update_quick_preview(&mut self) {
+        if !self.quick_preview_enabled {
+            return;
+        }
+
+        let node = match self.tree.get_node(self.selected) {
+            Some(n) => n,
+            None => return,
+        };
+
+        if node.is_dir {
+            self.quick_preview_content = vec!["[Directory]".to_string()];
+            self.quick_preview_path = Some(node.path.clone());
+            self.quick_preview_scroll = 0;
+            self.quick_preview_image = None;
+            return;
+        }
+
+        let path = node.path.clone();
+
+        // Check if it's the same file
+        if self.quick_preview_path.as_ref() == Some(&path) {
+            return;
+        }
+
+        // Check if it's an image file
+        if Self::is_image_file(&path) {
+            if let Ok(img) = image::open(&path) {
+                let img = img.to_rgb8();
+                let (width, height) = img.dimensions();
+                let pixels: Vec<(u8, u8, u8)> = img
+                    .pixels()
+                    .map(|p| (p[0], p[1], p[2]))
+                    .collect();
+
+                self.quick_preview_image = Some(ImagePreview {
+                    width,
+                    height,
+                    pixels,
+                });
+                self.quick_preview_content.clear();
+                self.quick_preview_path = Some(path);
+                self.quick_preview_scroll = 0;
+                return;
+            }
+        }
+
+        // Try to read as text
+        self.quick_preview_image = None;
+        match std::fs::read_to_string(&path) {
+            Ok(content) => {
+                self.quick_preview_content = content.lines().map(|s| s.to_string()).collect();
+            }
+            Err(_) => {
+                // Try to read as binary and show hex preview
+                if let Ok(bytes) = std::fs::read(&path) {
+                    self.quick_preview_content = bytes
+                        .chunks(16)
+                        .take(50)
+                        .map(|chunk| {
+                            let hex: Vec<String> = chunk.iter().map(|b| format!("{:02x}", b)).collect();
+                            let ascii: String = chunk.iter()
+                                .map(|&b| if b.is_ascii_graphic() || b == b' ' { b as char } else { '.' })
+                                .collect();
+                            format!("{:<48} {}", hex.join(" "), ascii)
+                        })
+                        .collect();
+                } else {
+                    self.quick_preview_content = vec!["[Cannot read file]".to_string()];
+                }
+            }
+        }
+        self.quick_preview_path = Some(path);
+        self.quick_preview_scroll = 0;
+    }
+
+    pub fn quick_preview_scroll_up(&mut self) {
+        if self.quick_preview_scroll > 0 {
+            self.quick_preview_scroll -= 1;
+        }
+    }
+
+    pub fn quick_preview_scroll_down(&mut self, visible_height: usize) {
+        if self.quick_preview_scroll + visible_height < self.quick_preview_content.len() {
+            self.quick_preview_scroll += 1;
+        }
     }
 
     pub fn preview_scroll_up(&mut self) {
