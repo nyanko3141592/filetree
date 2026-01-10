@@ -6,7 +6,7 @@ use ratatui::{
     Frame,
 };
 
-use crate::app::{App, ConfirmAction, DeleteInfo, InputMode};
+use crate::app::{App, ConfirmAction, DeleteInfo, ImagePreview, InputMode};
 use crate::git_status::GitStatus;
 
 pub fn draw(frame: &mut Frame, app: &mut App) -> usize {
@@ -280,6 +280,11 @@ fn draw_delete_confirm_popup(frame: &mut Frame, info: &DeleteInfo) {
 }
 
 fn draw_preview(frame: &mut Frame, app: &App) -> usize {
+    // If we have an image preview, use the image preview renderer
+    if app.image_preview.is_some() {
+        return draw_image_preview(frame, app);
+    }
+
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -336,6 +341,120 @@ fn draw_preview(frame: &mut Frame, app: &App) -> usize {
     frame.render_widget(status_widget, chunks[1]);
 
     visible_height
+}
+
+fn draw_image_preview(frame: &mut Frame, app: &App) -> usize {
+    let area = frame.area();
+    let is_wide = area.width > area.height * 2;
+
+    // Decide layout: wide = side by side, narrow = stacked
+    let (tree_area, image_area) = if is_wide {
+        // Wide: file tree on left, image on right
+        let chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
+            .split(area);
+        (Some(chunks[0]), chunks[1])
+    } else {
+        // Narrow: image at bottom (no tree shown in preview mode for simplicity)
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Min(3), Constraint::Length(1)])
+            .split(area);
+        (None, chunks[0])
+    };
+
+    // Draw file tree if in wide mode (simplified version)
+    if let Some(_tree_rect) = tree_area {
+        // In wide mode, we could show the tree, but for simplicity just show image info
+    }
+
+    // Draw image preview
+    let img = app.image_preview.as_ref().unwrap();
+    let title = app.preview_path
+        .as_ref()
+        .map(|p| {
+            let name = p.file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_default();
+            format!(" {} ({}x{}) ", name, img.width, img.height)
+        })
+        .unwrap_or_else(|| " Image Preview ".to_string());
+
+    // Calculate available space for image (minus borders)
+    let img_width = image_area.width.saturating_sub(2) as u32;
+    let img_height = (image_area.height.saturating_sub(3) * 2) as u32; // *2 because we use half blocks
+
+    let lines = render_image_to_lines(img, img_width, img_height);
+
+    let preview = Paragraph::new(lines)
+        .block(Block::default().borders(Borders::ALL).title(title));
+
+    frame.render_widget(preview, image_area);
+
+    // Status bar at bottom
+    let status_area = if is_wide {
+        Rect::new(area.x, area.height - 1, area.width, 1)
+    } else {
+        Rect::new(area.x, area.height - 1, area.width, 1)
+    };
+
+    let status = format!(
+        " {}x{} | q/Esc:close ",
+        img.width, img.height
+    );
+    let status_widget = Paragraph::new(status)
+        .style(Style::default().bg(Color::DarkGray));
+
+    frame.render_widget(status_widget, status_area);
+
+    image_area.height.saturating_sub(2) as usize
+}
+
+fn render_image_to_lines(img: &ImagePreview, target_width: u32, target_height: u32) -> Vec<Line<'static>> {
+    if target_width == 0 || target_height == 0 || img.width == 0 || img.height == 0 {
+        return vec![Line::from("Image too small to display")];
+    }
+
+    // Calculate scale to fit the image
+    let scale_x = img.width as f32 / target_width as f32;
+    let scale_y = img.height as f32 / target_height as f32;
+    let scale = scale_x.max(scale_y).max(1.0);
+
+    let display_width = (img.width as f32 / scale) as u32;
+    let display_height = (img.height as f32 / scale) as u32;
+
+    let mut lines = Vec::new();
+
+    // Use half block characters (▀) to display 2 vertical pixels per character
+    // Top half uses foreground color, bottom half uses background color
+    for y in (0..display_height).step_by(2) {
+        let mut spans = Vec::new();
+
+        for x in 0..display_width {
+            // Sample top pixel
+            let src_x = ((x as f32 * scale) as u32).min(img.width - 1);
+            let src_y_top = ((y as f32 * scale) as u32).min(img.height - 1);
+            let src_y_bottom = (((y + 1) as f32 * scale) as u32).min(img.height - 1);
+
+            let idx_top = (src_y_top * img.width + src_x) as usize;
+            let idx_bottom = (src_y_bottom * img.width + src_x) as usize;
+
+            let (r1, g1, b1) = img.pixels.get(idx_top).copied().unwrap_or((0, 0, 0));
+            let (r2, g2, b2) = img.pixels.get(idx_bottom).copied().unwrap_or((0, 0, 0));
+
+            spans.push(Span::styled(
+                "▀",
+                Style::default()
+                    .fg(Color::Rgb(r1, g1, b1))
+                    .bg(Color::Rgb(r2, g2, b2)),
+            ));
+        }
+
+        lines.push(Line::from(spans));
+    }
+
+    lines
 }
 
 fn centered_rect(percent_x: u16, height: u16, area: Rect) -> Rect {

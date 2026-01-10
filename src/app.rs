@@ -5,6 +5,14 @@ use crate::file_ops::{self, Clipboard, ClipboardContent};
 use crate::file_tree::FileTree;
 use crate::git_status::GitRepo;
 
+/// Image pixel data for terminal preview (RGB values)
+#[derive(Clone)]
+pub struct ImagePreview {
+    pub width: u32,
+    pub height: u32,
+    pub pixels: Vec<(u8, u8, u8)>, // RGB values
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum InputMode {
     Normal,
@@ -46,6 +54,7 @@ pub struct App {
     pub preview_content: Vec<String>,
     pub preview_scroll: usize,
     pub preview_path: Option<PathBuf>,
+    pub image_preview: Option<ImagePreview>,
     // Drop detection
     pub drop_buffer: String,
     pub last_char_time: std::time::Instant,
@@ -74,6 +83,7 @@ impl App {
             preview_content: Vec::new(),
             preview_scroll: 0,
             preview_path: None,
+            image_preview: None,
             drop_buffer: String::new(),
             last_char_time: std::time::Instant::now(),
         })
@@ -469,11 +479,24 @@ impl App {
             }
 
             let path = node.path.clone();
+
+            // Check if it's an image file
+            if Self::is_image_file(&path) {
+                match self.load_image_preview(&path) {
+                    Ok(()) => return,
+                    Err(e) => {
+                        self.message = Some(format!("Image error: {}", e));
+                        // Fall through to binary preview
+                    }
+                }
+            }
+
             match std::fs::read_to_string(&path) {
                 Ok(content) => {
                     self.preview_content = content.lines().map(|s| s.to_string()).collect();
                     self.preview_scroll = 0;
                     self.preview_path = Some(path);
+                    self.image_preview = None;
                     self.input_mode = InputMode::Preview;
                 }
                 Err(e) => {
@@ -493,6 +516,7 @@ impl App {
                         self.preview_content = preview;
                         self.preview_scroll = 0;
                         self.preview_path = Some(path);
+                        self.image_preview = None;
                         self.input_mode = InputMode::Preview;
                     } else {
                         self.message = Some(format!("Cannot read file: {}", e));
@@ -502,11 +526,44 @@ impl App {
         }
     }
 
+    fn is_image_file(path: &Path) -> bool {
+        let ext = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(|e| e.to_lowercase());
+        matches!(
+            ext.as_deref(),
+            Some("png" | "jpg" | "jpeg" | "gif" | "webp" | "bmp")
+        )
+    }
+
+    fn load_image_preview(&mut self, path: &Path) -> Result<(), String> {
+        let img = image::open(path).map_err(|e| e.to_string())?;
+        let img = img.to_rgb8();
+        let (width, height) = img.dimensions();
+        let pixels: Vec<(u8, u8, u8)> = img
+            .pixels()
+            .map(|p| (p[0], p[1], p[2]))
+            .collect();
+
+        self.image_preview = Some(ImagePreview {
+            width,
+            height,
+            pixels,
+        });
+        self.preview_path = Some(path.to_path_buf());
+        self.preview_content.clear();
+        self.preview_scroll = 0;
+        self.input_mode = InputMode::Preview;
+        Ok(())
+    }
+
     pub fn close_preview(&mut self) {
         self.input_mode = InputMode::Normal;
         self.preview_content.clear();
         self.preview_path = None;
         self.preview_scroll = 0;
+        self.image_preview = None;
     }
 
     pub fn preview_scroll_up(&mut self) {

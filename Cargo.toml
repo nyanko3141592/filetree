@@ -18,6 +18,7 @@ ratatui = "0.28"
 crossterm = "0.28"
 anyhow = "1.0"
 arboard = "3.4"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp"] }
 
 [profile.release]
 lto = true
