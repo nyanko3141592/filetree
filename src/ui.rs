@@ -6,7 +6,7 @@ use ratatui::{
     Frame,
 };
 
-use crate::app::{App, ConfirmAction, InputMode};
+use crate::app::{App, ConfirmAction, DeleteInfo, InputMode};
 use crate::git_status::GitStatus;
 
 pub fn draw(frame: &mut Frame, app: &mut App) -> usize {
@@ -169,25 +169,111 @@ fn draw_input_popup(frame: &mut Frame, app: &App) {
 }
 
 fn draw_confirm_popup(frame: &mut Frame, _app: &App, action: &ConfirmAction) {
-    let area = centered_rect(40, 5, frame.area());
+    match action {
+        ConfirmAction::Delete(info) => draw_delete_confirm_popup(frame, info),
+    }
+}
 
-    let message = match action {
-        ConfirmAction::Delete => "Delete selected item(s)?",
+fn draw_delete_confirm_popup(frame: &mut Frame, info: &DeleteInfo) {
+    // Calculate height based on content
+    let max_items_to_show = 8;
+    let items_count = info.paths.len().min(max_items_to_show);
+    let has_more = info.paths.len() > max_items_to_show;
+
+    // Height: title(1) + warning(2 if dir) + items + "more" line + blank + confirm line + borders(2)
+    let warning_lines = if info.has_directories { 2 } else { 0 };
+    let more_line = if has_more { 1 } else { 0 };
+    let height = (3 + warning_lines + items_count + more_line + 2) as u16;
+
+    let area = centered_rect(60, height, frame.area());
+
+    let mut content = Vec::new();
+
+    // Directory warning (emphasized)
+    if info.has_directories {
+        content.push(Line::from(vec![
+            Span::styled(
+                "!! WARNING: FOLDER DELETION !!",
+                Style::default()
+                    .fg(Color::Red)
+                    .add_modifier(Modifier::BOLD | Modifier::SLOW_BLINK),
+            ),
+        ]));
+        content.push(Line::from(vec![
+            Span::styled(
+                "Folders and all contents will be permanently deleted",
+                Style::default().fg(Color::Yellow),
+            ),
+        ]));
+        content.push(Line::from(""));
+    }
+
+    // List items to delete
+    content.push(Line::from(vec![
+        Span::styled(
+            format!("Delete {} item(s):", info.paths.len()),
+            Style::default().add_modifier(Modifier::BOLD),
+        ),
+    ]));
+
+    for path in info.paths.iter().take(max_items_to_show) {
+        let name = path
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| path.display().to_string());
+
+        let (icon, style) = if path.is_dir() {
+            ("", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD))
+        } else {
+            ("", Style::default().fg(Color::White))
+        };
+
+        content.push(Line::from(vec![
+            Span::raw("  "),
+            Span::styled(format!("{} {}", icon, name), style),
+        ]));
+    }
+
+    if has_more {
+        content.push(Line::from(vec![
+            Span::styled(
+                format!("  ... and {} more", info.paths.len() - max_items_to_show),
+                Style::default().fg(Color::DarkGray),
+            ),
+        ]));
+    }
+
+    content.push(Line::from(""));
+    content.push(Line::from(vec![
+        Span::styled("y", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+        Span::raw(" to confirm, "),
+        Span::styled("n", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)),
+        Span::raw(" to cancel"),
+    ]));
+
+    let title = if info.has_directories {
+        " !! DELETE FOLDERS !! "
+    } else {
+        " Confirm Delete "
     };
 
-    let content = vec![
-        Line::from(message),
-        Line::from(""),
-        Line::from(vec![
-            Span::styled("y", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
-            Span::raw(" to confirm, "),
-            Span::styled("n", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)),
-            Span::raw(" to cancel"),
-        ]),
-    ];
+    let title_style = if info.has_directories {
+        Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)
+    } else {
+        Style::default()
+    };
 
     let popup = Paragraph::new(content)
-        .block(Block::default().borders(Borders::ALL).title("Confirm"));
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(if info.has_directories {
+                    Style::default().fg(Color::Red)
+                } else {
+                    Style::default()
+                })
+                .title(Span::styled(title, title_style)),
+        );
 
     frame.render_widget(Clear, area);
     frame.render_widget(popup, area);

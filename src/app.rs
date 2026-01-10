@@ -17,8 +17,14 @@ pub enum InputMode {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct DeleteInfo {
+    pub paths: Vec<PathBuf>,
+    pub has_directories: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum ConfirmAction {
-    Delete,
+    Delete(DeleteInfo),
 }
 
 pub struct App {
@@ -255,7 +261,12 @@ impl App {
     pub fn confirm_delete(&mut self) {
         let paths = self.get_selected_paths();
         if !paths.is_empty() {
-            self.input_mode = InputMode::Confirm(ConfirmAction::Delete);
+            let has_directories = paths.iter().any(|p| p.is_dir());
+            let delete_info = DeleteInfo {
+                paths,
+                has_directories,
+            };
+            self.input_mode = InputMode::Confirm(ConfirmAction::Delete(delete_info));
         }
     }
 
@@ -329,7 +340,7 @@ impl App {
                 }
                 self.search_next();
             }
-            InputMode::Confirm(ConfirmAction::Delete) => {
+            InputMode::Confirm(ConfirmAction::Delete(_)) => {
                 self.execute_delete();
             }
             InputMode::Normal | InputMode::Preview => {}

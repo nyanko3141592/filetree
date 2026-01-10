@@ -130,7 +130,7 @@ fn handle_input_mode(app: &mut App, key: KeyEvent) {
 fn handle_confirm_mode(app: &mut App, key: KeyEvent) {
     match key.code {
         KeyCode::Char('y') | KeyCode::Char('Y') | KeyCode::Enter => {
-            if let InputMode::Confirm(ConfirmAction::Delete) = app.input_mode {
+            if let InputMode::Confirm(ConfirmAction::Delete(_)) = app.input_mode {
                 app.execute_delete();
             }
             app.input_mode = InputMode::Normal;
