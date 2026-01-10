@@ -21,6 +21,12 @@ A fast, lightweight file explorer TUI with VSCode-like interface and Vim keybind
 
 ## Installation
 
+### From crates.io
+
+```bash
+cargo install filetree
+```
+
 ### From source
 
 ```bash
