@@ -416,26 +416,46 @@ fn render_image_to_lines(img: &ImagePreview, target_width: u32, target_height: u
         return vec![Line::from("Image too small to display")];
     }
 
-    // Calculate scale to fit the image
-    let scale_x = img.width as f32 / target_width as f32;
-    let scale_y = img.height as f32 / target_height as f32;
-    let scale = scale_x.max(scale_y).max(1.0);
+    // Terminal characters are roughly 2:1 (height:width ratio)
+    // Each row displays 2 vertical pixels using half blocks
+    // So effective pixel aspect is: width=1char, height=2pixels per row
+    // To maintain aspect ratio, we need to account for character aspect ratio (~2:1)
+    let char_aspect = 2.0; // Terminal chars are about twice as tall as wide
 
-    let display_width = (img.width as f32 / scale) as u32;
-    let display_height = (img.height as f32 / scale) as u32;
+    let img_aspect = img.width as f32 / img.height as f32;
+    let term_pixel_width = target_width as f32;
+    let term_pixel_height = target_height as f32; // Already doubled for half-blocks
 
+    // Adjust for character aspect ratio
+    let adjusted_term_aspect = (term_pixel_width * char_aspect) / term_pixel_height;
+
+    let (display_width, display_height) = if img_aspect > adjusted_term_aspect {
+        // Image is wider - fit to width
+        let w = target_width;
+        let h = ((target_width as f32 / char_aspect) / img_aspect * 2.0) as u32;
+        (w, h.max(2))
+    } else {
+        // Image is taller - fit to height
+        let h = target_height;
+        let w = (target_height as f32 / 2.0 * img_aspect * char_aspect) as u32;
+        (w.max(1), h)
+    };
+
+    let term_rows = display_height / 2;
     let mut lines = Vec::new();
 
-    // Use half block characters (▀) to display 2 vertical pixels per character
-    // Top half uses foreground color, bottom half uses background color
-    for y in (0..display_height).step_by(2) {
+    for row in 0..term_rows {
         let mut spans = Vec::new();
 
-        for x in 0..display_width {
-            // Sample top pixel
-            let src_x = ((x as f32 * scale) as u32).min(img.width - 1);
-            let src_y_top = ((y as f32 * scale) as u32).min(img.height - 1);
-            let src_y_bottom = (((y + 1) as f32 * scale) as u32).min(img.height - 1);
+        for col in 0..display_width {
+            // Map terminal position to source image position
+            let src_x = ((col as f32 / display_width as f32) * img.width as f32) as u32;
+            let src_y_top = ((row as f32 * 2.0 / display_height as f32) * img.height as f32) as u32;
+            let src_y_bottom = (((row as f32 * 2.0 + 1.0) / display_height as f32) * img.height as f32) as u32;
+
+            let src_x = src_x.min(img.width - 1);
+            let src_y_top = src_y_top.min(img.height - 1);
+            let src_y_bottom = src_y_bottom.min(img.height - 1);
 
             let idx_top = (src_y_top * img.width + src_x) as usize;
             let idx_bottom = (src_y_bottom * img.width + src_x) as usize;
