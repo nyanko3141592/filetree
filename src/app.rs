@@ -585,9 +585,12 @@ impl App {
         let text = self.drop_buffer.trim().to_string();
         self.drop_buffer.clear();
 
+        // Normalize the path: remove quotes and unescape backslashes
+        let normalized = Self::normalize_dropped_path(&text);
+
         // Check if it's an absolute path that exists
-        if text.starts_with('/') {
-            let path = PathBuf::from(&text);
+        if normalized.starts_with('/') {
+            let path = PathBuf::from(&normalized);
             if path.exists() {
                 if let Some(dest_dir) = self.get_paste_destination() {
                     match file_ops::copy_file(&path, &dest_dir) {
@@ -620,15 +623,49 @@ impl App {
         }
     }
 
+    /// Normalize a dropped path by removing quotes and unescaping backslashes
+    fn normalize_dropped_path(text: &str) -> String {
+        let text = text.trim();
+
+        // Remove surrounding quotes if present
+        let text = if (text.starts_with('\'') && text.ends_with('\''))
+            || (text.starts_with('"') && text.ends_with('"'))
+        {
+            &text[1..text.len() - 1]
+        } else {
+            text
+        };
+
+        // Unescape backslash-escaped characters (e.g., "\ " -> " ")
+        let mut result = String::with_capacity(text.len());
+        let mut chars = text.chars().peekable();
+        while let Some(c) = chars.next() {
+            if c == '\\' {
+                if let Some(&next) = chars.peek() {
+                    // Common escaped characters in shell paths
+                    if matches!(next, ' ' | '\'' | '"' | '\\' | '(' | ')' | '[' | ']' | '&' | ';' | '!' | '$' | '`') {
+                        result.push(chars.next().unwrap());
+                        continue;
+                    }
+                }
+            }
+            result.push(c);
+        }
+        result
+    }
+
     fn try_handle_as_drop(&mut self) -> bool {
         let text = self.input_buffer.trim();
+        // Normalize the path (remove quotes, unescape)
+        let normalized = Self::normalize_dropped_path(text);
+
         // Check if it looks like an absolute path
-        if !text.starts_with('/') {
+        if !normalized.starts_with('/') {
             return false;
         }
 
         // Try as single path first
-        let path = PathBuf::from(text);
+        let path = PathBuf::from(&normalized);
         if path.exists() {
             let dest_dir = match self.get_paste_destination() {
                 Some(dir) => dir,
@@ -715,9 +752,9 @@ impl App {
         // Try newline-separated first
         if text.contains('\n') {
             for line in text.lines() {
-                let line = line.trim();
-                if !line.is_empty() {
-                    let path = PathBuf::from(line);
+                let normalized = Self::normalize_dropped_path(line);
+                if !normalized.is_empty() {
+                    let path = PathBuf::from(&normalized);
                     if path.is_absolute() && path.exists() {
                         paths.push(path);
                     }
@@ -727,15 +764,31 @@ impl App {
         }
 
         // Single path or space-separated paths
-        // Handle quoted paths
+        // Handle quoted paths and escaped spaces
         let mut chars = text.chars().peekable();
         let mut current = String::new();
         let mut in_quote = false;
+        let mut quote_char: Option<char> = None;
 
         while let Some(c) = chars.next() {
             match c {
                 '"' | '\'' => {
-                    in_quote = !in_quote;
+                    if in_quote && Some(c) == quote_char {
+                        in_quote = false;
+                        quote_char = None;
+                    } else if !in_quote {
+                        in_quote = true;
+                        quote_char = Some(c);
+                    } else {
+                        // Different quote inside quoted string
+                        current.push(c);
+                    }
+                }
+                '\\' if !in_quote => {
+                    // Handle escaped characters outside quotes
+                    if let Some(next) = chars.next() {
+                        current.push(next);
+                    }
                 }
                 ' ' if !in_quote => {
                     if !current.is_empty() {

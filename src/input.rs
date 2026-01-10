@@ -58,7 +58,8 @@ fn handle_normal_mode(app: &mut App, key: KeyEvent) {
         KeyCode::Char('A') => app.start_new_dir(),
 
         // Search (buffered for drop detection)
-        KeyCode::Char('/') => app.buffer_char('/'),
+        // Also buffer quotes and backslash for quoted/escaped paths
+        KeyCode::Char(c @ ('/' | '\'' | '"' | '\\')) => app.buffer_char(c),
         KeyCode::Char('n') => app.search_next(),
 
         // Reload tree
