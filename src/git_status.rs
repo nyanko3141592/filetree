@@ -19,6 +19,7 @@ pub enum GitStatus {
 pub struct GitRepo {
     pub root: Option<PathBuf>,
     pub statuses: HashMap<PathBuf, GitStatus>,
+    pub branch: Option<String>,
 }
 
 impl GitRepo {
@@ -31,9 +32,11 @@ impl GitRepo {
     pub fn refresh(&mut self, path: &Path) {
         self.root = find_git_root(path);
         self.statuses.clear();
+        self.branch = None;
 
         if let Some(root) = self.root.clone() {
             self.load_statuses(&root);
+            self.branch = get_current_branch(&root);
         }
     }
 
@@ -153,5 +156,19 @@ fn parse_status(index: char, worktree: char) -> GitStatus {
         ('D', _) | (_, 'D') => GitStatus::Deleted,
         ('M', _) | (_, 'M') => GitStatus::Modified,
         _ => GitStatus::None,
+    }
+}
+
+fn get_current_branch(root: &Path) -> Option<String> {
+    let output = Command::new("git")
+        .args(["rev-parse", "--abbrev-ref", "HEAD"])
+        .current_dir(root)
+        .output()
+        .ok()?;
+
+    if output.status.success() {
+        Some(String::from_utf8_lossy(&output.stdout).trim().to_string())
+    } else {
+        None
     }
 }

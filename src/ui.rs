@@ -100,7 +100,8 @@ fn draw_file_tree(frame: &mut Frame, app: &mut App, area: Rect) {
         })
         .collect();
 
-    let title = format!(" {} ", app.tree.root.path.display());
+    let max_title_width = area.width.saturating_sub(4) as usize; // Account for borders and padding
+    let title = format!(" {} ", abbreviate_path(&app.tree.root.path, max_title_width));
     let list = List::new(items)
         .block(Block::default().borders(Borders::ALL).title(title));
 
@@ -131,12 +132,17 @@ fn draw_status_bar(frame: &mut Frame, app: &App, area: Rect) {
         }
     };
 
+    let branch_info = app.git_repo.branch.as_ref()
+        .map(|b| format!(" {}", b))
+        .unwrap_or_default();
+
     let stats = format!(
-        "{}/{}{}{}",
+        "{}/{}{}{}{}",
         app.selected + 1,
         app.tree.len(),
         if marked_count > 0 { format!(" | Marked: {}", marked_count) } else { String::new() },
-        clipboard_info
+        clipboard_info,
+        branch_info
     );
     let stats_widget = Paragraph::new(stats)
         .block(Block::default().borders(Borders::ALL));
@@ -264,6 +270,48 @@ fn centered_rect(percent_x: u16, height: u16, area: Rect) -> Rect {
             Constraint::Percentage((100 - percent_x) / 2),
         ])
         .split(popup_layout[1])[1]
+}
+
+fn abbreviate_path(path: &std::path::Path, max_width: usize) -> String {
+    let full_path = path.display().to_string();
+
+    if full_path.len() <= max_width {
+        return full_path;
+    }
+
+    let components: Vec<&str> = full_path.split('/').collect();
+    if components.is_empty() {
+        return full_path;
+    }
+
+    // Keep the last component (directory name) intact
+    let last = components.last().unwrap_or(&"");
+
+    // Abbreviate all but the last component to first character
+    let mut abbreviated: Vec<String> = components[..components.len() - 1]
+        .iter()
+        .map(|c| {
+            if c.is_empty() {
+                String::new()
+            } else {
+                c.chars().next().unwrap_or_default().to_string()
+            }
+        })
+        .collect();
+    abbreviated.push(last.to_string());
+
+    let result = abbreviated.join("/");
+
+    // If still too long, just show the last component
+    if result.len() > max_width {
+        if last.len() > max_width {
+            format!("…{}", &last[last.len().saturating_sub(max_width - 1)..])
+        } else {
+            last.to_string()
+        }
+    } else {
+        result
+    }
 }
 
 fn get_file_icon(name: &str) -> &'static str {
