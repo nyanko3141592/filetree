@@ -17,6 +17,7 @@ A fast, lightweight file explorer TUI with VSCode-like interface and Vim keybind
 - **Hidden files toggle** - Show/hide dotfiles with `.`
 - **Path copying** - Copy file path to system clipboard
 - **File icons** - Beautiful icons with Nerd Fonts
+- **Drag & Drop** - Drop files to copy into selected folder
 
 ## Installation
 
@@ -102,6 +103,7 @@ ft ~/Documents  # Specific directory
 | Click | Select |
 | Double-click | Expand/collapse |
 | Scroll | Navigate |
+| Drag & Drop | Copy file to selected folder |
 
 ## Git Status Colors
 

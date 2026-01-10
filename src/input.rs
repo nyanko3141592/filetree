@@ -14,7 +14,10 @@ pub fn handle_key_event(app: &mut App, key: KeyEvent, visible_height: usize) {
 }
 
 fn handle_normal_mode(app: &mut App, key: KeyEvent) {
-    app.message = None;
+    // Don't clear message while buffering drop
+    if app.drop_buffer.is_empty() {
+        app.message = None;
+    }
 
     match key.code {
         // Quit
@@ -54,8 +57,8 @@ fn handle_normal_mode(app: &mut App, key: KeyEvent) {
         KeyCode::Char('a') => app.start_new_file(),
         KeyCode::Char('A') => app.start_new_dir(),
 
-        // Search
-        KeyCode::Char('/') => app.start_search(),
+        // Search (buffered for drop detection)
+        KeyCode::Char('/') => app.buffer_char('/'),
         KeyCode::Char('n') => app.search_next(),
 
         // Reload tree
@@ -74,6 +77,13 @@ fn handle_normal_mode(app: &mut App, key: KeyEvent) {
         // Help
         KeyCode::Char('?') => {
             app.message = Some("o:preview  c:path  C:name  y:yank  d:cut  p:paste  D:del  r:rename  a:file  A:dir  R:reload".to_string());
+        }
+
+        // Buffer unknown chars for drop detection
+        KeyCode::Char(c) => {
+            if !app.drop_buffer.is_empty() {
+                app.buffer_char(c);
+            }
         }
 
         _ => {}

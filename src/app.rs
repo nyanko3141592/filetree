@@ -40,6 +40,9 @@ pub struct App {
     pub preview_content: Vec<String>,
     pub preview_scroll: usize,
     pub preview_path: Option<PathBuf>,
+    // Drop detection
+    pub drop_buffer: String,
+    pub last_char_time: std::time::Instant,
 }
 
 impl App {
@@ -65,6 +68,8 @@ impl App {
             preview_content: Vec::new(),
             preview_scroll: 0,
             preview_path: None,
+            drop_buffer: String::new(),
+            last_char_time: std::time::Instant::now(),
         })
     }
 
@@ -316,6 +321,12 @@ impl App {
                 }
             }
             InputMode::Search => {
+                // Check if input looks like a dropped file path
+                if self.try_handle_as_drop() {
+                    self.input_mode = InputMode::Normal;
+                    self.input_buffer.clear();
+                    return;
+                }
                 self.search_next();
             }
             InputMode::Confirm(ConfirmAction::Delete) => {
@@ -544,5 +555,210 @@ impl App {
         for _ in 0..lines {
             self.move_down();
         }
+    }
+
+    pub fn buffer_char(&mut self, c: char) {
+        let now = std::time::Instant::now();
+        let elapsed = now.duration_since(self.last_char_time).as_millis();
+        // If more than 50ms since last char, start new buffer
+        if elapsed > 50 {
+            self.drop_buffer.clear();
+        }
+        self.drop_buffer.push(c);
+        self.last_char_time = now;
+    }
+
+    pub fn check_drop_buffer(&mut self) {
+        if self.drop_buffer.is_empty() {
+            return;
+        }
+
+        let elapsed = std::time::Instant::now()
+            .duration_since(self.last_char_time)
+            .as_millis();
+
+        // Wait for input to stop (100ms)
+        if elapsed < 100 {
+            return;
+        }
+
+        let text = self.drop_buffer.trim().to_string();
+        self.drop_buffer.clear();
+
+        // Check if it's an absolute path that exists
+        if text.starts_with('/') {
+            let path = PathBuf::from(&text);
+            if path.exists() {
+                if let Some(dest_dir) = self.get_paste_destination() {
+                    match file_ops::copy_file(&path, &dest_dir) {
+                        Ok(_) => {
+                            self.message = Some(format!(
+                                "Dropped: {}",
+                                path.file_name().unwrap_or_default().to_string_lossy()
+                            ));
+                            let _ = self.tree.refresh();
+                        }
+                        Err(e) => {
+                            self.message = Some(format!("Copy error: {}", e));
+                        }
+                    }
+                }
+                return;
+            }
+        }
+
+        // Not a valid path, treat first char as command
+        if let Some(first) = text.chars().next() {
+            match first {
+                '/' => {
+                    // Start search with remaining chars
+                    self.input_buffer = text[1..].to_string();
+                    self.input_mode = InputMode::Search;
+                }
+                _ => {}
+            }
+        }
+    }
+
+    fn try_handle_as_drop(&mut self) -> bool {
+        let text = self.input_buffer.trim();
+        // Check if it looks like an absolute path
+        if !text.starts_with('/') {
+            return false;
+        }
+
+        // Try as single path first
+        let path = PathBuf::from(text);
+        if path.exists() {
+            let dest_dir = match self.get_paste_destination() {
+                Some(dir) => dir,
+                None => {
+                    self.message = Some("No destination".to_string());
+                    return false;
+                }
+            };
+
+            match file_ops::copy_file(&path, &dest_dir) {
+                Ok(_) => {
+                    self.message = Some(format!("Dropped: {}", path.file_name().unwrap_or_default().to_string_lossy()));
+                    let _ = self.tree.refresh();
+                    return true;
+                }
+                Err(e) => {
+                    self.message = Some(format!("Copy error: {}", e));
+                    return false;
+                }
+            }
+        }
+
+        // Try parsing multiple paths
+        let paths = Self::parse_dropped_paths(text);
+        if paths.is_empty() {
+            return false;
+        }
+
+        let dest_dir = match self.get_paste_destination() {
+            Some(dir) => dir,
+            None => return false,
+        };
+
+        let mut success = 0;
+        for path in &paths {
+            if file_ops::copy_file(path, &dest_dir).is_ok() {
+                success += 1;
+            }
+        }
+
+        if success > 0 {
+            self.message = Some(format!("Dropped {} item(s)", success));
+            let _ = self.tree.refresh();
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn handle_drop(&mut self, text: &str) {
+        // Parse dropped text as file paths
+        // Paths can be separated by newlines or spaces (with quotes for paths containing spaces)
+        let paths: Vec<PathBuf> = Self::parse_dropped_paths(text);
+
+        if paths.is_empty() {
+            return;
+        }
+
+        // Get destination directory
+        let dest_dir = match self.get_paste_destination() {
+            Some(dir) => dir,
+            None => return,
+        };
+
+        let mut success = 0;
+        for path in &paths {
+            if path.exists() {
+                if file_ops::copy_file(path, &dest_dir).is_ok() {
+                    success += 1;
+                }
+            }
+        }
+
+        if success > 0 {
+            self.message = Some(format!("Dropped {} item(s)", success));
+            let _ = self.tree.refresh();
+        }
+    }
+
+    fn parse_dropped_paths(text: &str) -> Vec<PathBuf> {
+        let mut paths = Vec::new();
+        let text = text.trim();
+
+        // Try newline-separated first
+        if text.contains('\n') {
+            for line in text.lines() {
+                let line = line.trim();
+                if !line.is_empty() {
+                    let path = PathBuf::from(line);
+                    if path.is_absolute() && path.exists() {
+                        paths.push(path);
+                    }
+                }
+            }
+            return paths;
+        }
+
+        // Single path or space-separated paths
+        // Handle quoted paths
+        let mut chars = text.chars().peekable();
+        let mut current = String::new();
+        let mut in_quote = false;
+
+        while let Some(c) = chars.next() {
+            match c {
+                '"' | '\'' => {
+                    in_quote = !in_quote;
+                }
+                ' ' if !in_quote => {
+                    if !current.is_empty() {
+                        let path = PathBuf::from(&current);
+                        if path.is_absolute() && path.exists() {
+                            paths.push(path);
+                        }
+                        current.clear();
+                    }
+                }
+                _ => {
+                    current.push(c);
+                }
+            }
+        }
+
+        if !current.is_empty() {
+            let path = PathBuf::from(&current);
+            if path.is_absolute() && path.exists() {
+                paths.push(path);
+            }
+        }
+
+        paths
     }
 }
