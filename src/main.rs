@@ -57,16 +57,18 @@ fn main() -> Result<()> {
 }
 
 fn run_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> io::Result<()> {
+    let mut visible_height = 20usize;
+
     loop {
         terminal.draw(|f| {
             app.tree_area_height = f.area().height.saturating_sub(5) as usize;
-            ui::draw(f, app);
+            visible_height = ui::draw(f, app);
         })?;
 
         if event::poll(Duration::from_millis(100))? {
             match event::read()? {
                 Event::Key(key) => {
-                    input::handle_key_event(app, key);
+                    input::handle_key_event(app, key, visible_height);
                 }
                 Event::Mouse(mouse) => {
                     input::handle_mouse_event(app, mouse);

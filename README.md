@@ -13,7 +13,7 @@ A fast, lightweight file explorer TUI with VSCode-like interface and Vim keybind
 - **File operations** - Copy, cut, paste, delete, rename
 - **Multi-select** - Mark multiple files with `Space`
 - **Quick search** - Incremental search with `/`
-- **Open in editor** - Launch files in `$EDITOR`
+- **File preview** - Quick view file contents (like `cat`)
 - **Hidden files toggle** - Show/hide dotfiles with `.`
 - **Path copying** - Copy file path to system clipboard
 - **File icons** - Beautiful icons with Nerd Fonts
@@ -67,14 +67,23 @@ ft ~/Documents  # Specific directory
 | `D` | Delete |
 | `r` | Rename |
 | `a` / `A` | New file / directory |
-| `o` | Open in $EDITOR |
+| `o` | Preview file |
 
 ### View
 
 | Key | Action |
 |-----|--------|
 | `.` | Toggle hidden files |
-| `R` | Refresh |
+| `R` / `F5` | Reload tree |
+
+### Preview Mode
+
+| Key | Action |
+|-----|--------|
+| `j` / `k` | Scroll down / up |
+| `f` / `b` | Page down / up |
+| `g` / `G` | Jump to top / bottom |
+| `q` / `Esc` | Close preview |
 
 ### Other
 

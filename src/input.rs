@@ -2,13 +2,14 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKi
 
 use crate::app::{App, ConfirmAction, InputMode};
 
-pub fn handle_key_event(app: &mut App, key: KeyEvent) {
+pub fn handle_key_event(app: &mut App, key: KeyEvent, visible_height: usize) {
     match &app.input_mode {
         InputMode::Normal => handle_normal_mode(app, key),
         InputMode::Search | InputMode::Rename | InputMode::NewFile | InputMode::NewDir => {
             handle_input_mode(app, key);
         }
         InputMode::Confirm(_) => handle_confirm_mode(app, key),
+        InputMode::Preview => handle_preview_mode(app, key, visible_height),
     }
 }
 
@@ -57,7 +58,7 @@ fn handle_normal_mode(app: &mut App, key: KeyEvent) {
         KeyCode::Char('/') => app.start_search(),
         KeyCode::Char('n') => app.search_next(),
 
-        // Refresh
+        // Reload tree
         KeyCode::Char('R') | KeyCode::F(5) => app.refresh(),
 
         // Toggle hidden files
@@ -67,12 +68,12 @@ fn handle_normal_mode(app: &mut App, key: KeyEvent) {
         KeyCode::Char('c') => app.copy_path(),
         KeyCode::Char('C') => app.copy_filename(),
 
-        // Open in external editor
-        KeyCode::Char('o') => app.open_in_editor(),
+        // Preview file
+        KeyCode::Char('o') => app.preview_file(),
 
         // Help
         KeyCode::Char('?') => {
-            app.message = Some("c:copy path  C:copy name  y:yank  d:cut  p:paste  D:del  r:rename  a:file  A:dir  /:search".to_string());
+            app.message = Some("o:preview  c:path  C:name  y:yank  d:cut  p:paste  D:del  r:rename  a:file  A:dir  R:reload".to_string());
         }
 
         _ => {}
@@ -126,6 +127,21 @@ fn handle_confirm_mode(app: &mut App, key: KeyEvent) {
         KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {
             app.input_mode = InputMode::Normal;
             app.message = Some("Cancelled".to_string());
+        }
+        _ => {}
+    }
+}
+
+fn handle_preview_mode(app: &mut App, key: KeyEvent, visible_height: usize) {
+    match key.code {
+        KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('o') => app.close_preview(),
+        KeyCode::Up | KeyCode::Char('k') => app.preview_scroll_up(),
+        KeyCode::Down | KeyCode::Char('j') => app.preview_scroll_down(visible_height),
+        KeyCode::PageUp | KeyCode::Char('b') => app.preview_page_up(visible_height),
+        KeyCode::PageDown | KeyCode::Char('f') | KeyCode::Char(' ') => app.preview_page_down(visible_height),
+        KeyCode::Char('g') => app.preview_scroll = 0,
+        KeyCode::Char('G') => {
+            app.preview_scroll = app.preview_content.len().saturating_sub(visible_height);
         }
         _ => {}
     }

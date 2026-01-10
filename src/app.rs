@@ -1,6 +1,5 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use crate::file_ops::{self, Clipboard, ClipboardContent};
 use crate::file_tree::FileTree;
@@ -14,6 +13,7 @@ pub enum InputMode {
     NewFile,
     NewDir,
     Confirm(ConfirmAction),
+    Preview,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -36,6 +36,10 @@ pub struct App {
     pub last_click_time: std::time::Instant,
     pub last_click_index: Option<usize>,
     pub show_hidden: bool,
+    // Preview mode state
+    pub preview_content: Vec<String>,
+    pub preview_scroll: usize,
+    pub preview_path: Option<PathBuf>,
 }
 
 impl App {
@@ -58,6 +62,9 @@ impl App {
             last_click_time: std::time::Instant::now(),
             last_click_index: None,
             show_hidden,
+            preview_content: Vec::new(),
+            preview_scroll: 0,
+            preview_path: None,
         })
     }
 
@@ -314,7 +321,7 @@ impl App {
             InputMode::Confirm(ConfirmAction::Delete) => {
                 self.execute_delete();
             }
-            InputMode::Normal => {}
+            InputMode::Normal | InputMode::Preview => {}
         }
         self.input_mode = InputMode::Normal;
         self.input_buffer.clear();
@@ -432,38 +439,73 @@ impl App {
         }
     }
 
-    pub fn open_in_editor(&mut self) {
+    pub fn preview_file(&mut self) {
         if let Some(node) = self.tree.get_node(self.selected) {
+            if node.is_dir {
+                self.message = Some("Cannot preview directory".to_string());
+                return;
+            }
+
             let path = node.path.clone();
-
-            // Try $EDITOR, then common editors
-            let editor = std::env::var("EDITOR")
-                .ok()
-                .or_else(|| std::env::var("VISUAL").ok())
-                .unwrap_or_else(|| {
-                    // Default editors by platform
-                    if cfg!(target_os = "macos") {
-                        "open".to_string()
-                    } else if cfg!(target_os = "windows") {
-                        "notepad".to_string()
-                    } else {
-                        "xdg-open".to_string()
-                    }
-                });
-
-            let result = Command::new(&editor)
-                .arg(&path)
-                .spawn();
-
-            match result {
-                Ok(_) => {
-                    self.message = Some(format!("Opened with {}", editor));
+            match std::fs::read_to_string(&path) {
+                Ok(content) => {
+                    self.preview_content = content.lines().map(|s| s.to_string()).collect();
+                    self.preview_scroll = 0;
+                    self.preview_path = Some(path);
+                    self.input_mode = InputMode::Preview;
                 }
                 Err(e) => {
-                    self.message = Some(format!("Failed to open: {}", e));
+                    // Try to read as binary and show hex preview
+                    if let Ok(bytes) = std::fs::read(&path) {
+                        let preview: Vec<String> = bytes
+                            .chunks(16)
+                            .take(100)
+                            .map(|chunk| {
+                                let hex: Vec<String> = chunk.iter().map(|b| format!("{:02x}", b)).collect();
+                                let ascii: String = chunk.iter()
+                                    .map(|&b| if b.is_ascii_graphic() || b == b' ' { b as char } else { '.' })
+                                    .collect();
+                                format!("{:<48} {}", hex.join(" "), ascii)
+                            })
+                            .collect();
+                        self.preview_content = preview;
+                        self.preview_scroll = 0;
+                        self.preview_path = Some(path);
+                        self.input_mode = InputMode::Preview;
+                    } else {
+                        self.message = Some(format!("Cannot read file: {}", e));
+                    }
                 }
             }
         }
+    }
+
+    pub fn close_preview(&mut self) {
+        self.input_mode = InputMode::Normal;
+        self.preview_content.clear();
+        self.preview_path = None;
+        self.preview_scroll = 0;
+    }
+
+    pub fn preview_scroll_up(&mut self) {
+        if self.preview_scroll > 0 {
+            self.preview_scroll -= 1;
+        }
+    }
+
+    pub fn preview_scroll_down(&mut self, visible_height: usize) {
+        if self.preview_scroll + visible_height < self.preview_content.len() {
+            self.preview_scroll += 1;
+        }
+    }
+
+    pub fn preview_page_up(&mut self, visible_height: usize) {
+        self.preview_scroll = self.preview_scroll.saturating_sub(visible_height);
+    }
+
+    pub fn preview_page_down(&mut self, visible_height: usize) {
+        let max_scroll = self.preview_content.len().saturating_sub(visible_height);
+        self.preview_scroll = (self.preview_scroll + visible_height).min(max_scroll);
     }
 
     pub fn select_by_row(&mut self, row: u16) {
