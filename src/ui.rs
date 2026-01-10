@@ -9,7 +9,12 @@ use ratatui::{
 use crate::app::{App, ConfirmAction, InputMode};
 use crate::git_status::GitStatus;
 
-pub fn draw(frame: &mut Frame, app: &mut App) {
+pub fn draw(frame: &mut Frame, app: &mut App) -> usize {
+    // If in preview mode, draw preview instead
+    if app.input_mode == InputMode::Preview {
+        return draw_preview(frame, app);
+    }
+
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -29,8 +34,10 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
         InputMode::Confirm(action) => {
             draw_confirm_popup(frame, app, action);
         }
-        InputMode::Normal => {}
+        InputMode::Normal | InputMode::Preview => {}
     }
+
+    app.tree_area_height
 }
 
 fn draw_file_tree(frame: &mut Frame, app: &mut App, area: Rect) {
@@ -178,6 +185,65 @@ fn draw_confirm_popup(frame: &mut Frame, _app: &App, action: &ConfirmAction) {
 
     frame.render_widget(Clear, area);
     frame.render_widget(popup, area);
+}
+
+fn draw_preview(frame: &mut Frame, app: &App) -> usize {
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Min(3),
+            Constraint::Length(1),
+        ])
+        .split(frame.area());
+
+    let visible_height = chunks[0].height.saturating_sub(2) as usize;
+
+    let title = app.preview_path
+        .as_ref()
+        .map(|p| format!(" {} ", p.display()))
+        .unwrap_or_else(|| " Preview ".to_string());
+
+    let lines: Vec<Line> = app.preview_content
+        .iter()
+        .skip(app.preview_scroll)
+        .take(visible_height)
+        .enumerate()
+        .map(|(i, line)| {
+            let line_num = app.preview_scroll + i + 1;
+            Line::from(vec![
+                Span::styled(
+                    format!("{:4} ", line_num),
+                    Style::default().fg(Color::DarkGray),
+                ),
+                Span::raw(line.as_str()),
+            ])
+        })
+        .collect();
+
+    let preview = Paragraph::new(lines)
+        .block(Block::default().borders(Borders::ALL).title(title));
+
+    frame.render_widget(preview, chunks[0]);
+
+    // Status bar
+    let total_lines = app.preview_content.len();
+    let current_line = app.preview_scroll + 1;
+    let percent = if total_lines > 0 {
+        (current_line * 100) / total_lines
+    } else {
+        100
+    };
+
+    let status = format!(
+        " Line {}/{} ({}%) | j/k:scroll  f/b:page  g/G:top/bottom  q/Esc:close ",
+        current_line, total_lines, percent
+    );
+    let status_widget = Paragraph::new(status)
+        .style(Style::default().bg(Color::DarkGray));
+
+    frame.render_widget(status_widget, chunks[1]);
+
+    visible_height
 }
 
 fn centered_rect(percent_x: u16, height: u16, area: Rect) -> Rect {
