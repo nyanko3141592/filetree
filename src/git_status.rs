@@ -19,6 +19,7 @@ pub enum GitStatus {
 pub struct GitRepo {
     pub root: Option<PathBuf>,
     pub statuses: HashMap<PathBuf, GitStatus>,
+    pub dir_status_cache: HashMap<PathBuf, GitStatus>,
     pub branch: Option<String>,
 }
 
@@ -32,10 +33,12 @@ impl GitRepo {
     pub fn refresh(&mut self, path: &Path) {
         self.root = find_git_root(path);
         self.statuses.clear();
+        self.dir_status_cache.clear();
         self.branch = None;
 
         if let Some(root) = self.root.clone() {
             self.load_statuses(&root);
+            self.build_directory_cache();
             self.branch = get_current_branch(&root);
         }
     }
@@ -89,37 +92,57 @@ impl GitRepo {
         }
     }
 
+    fn build_directory_cache(&mut self) {
+        // Build a set of all directories that contain changed files
+        let mut dir_statuses: HashMap<PathBuf, (bool, bool)> = HashMap::new(); // (has_modified, has_untracked)
+
+        for (file_path, status) in &self.statuses {
+            // Walk up the directory tree for each changed file
+            let mut current = file_path.parent();
+            while let Some(dir) = current {
+                let entry = dir_statuses.entry(dir.to_path_buf()).or_insert((false, false));
+
+                match status {
+                    GitStatus::Modified | GitStatus::Added | GitStatus::Deleted |
+                    GitStatus::Renamed | GitStatus::Conflict => {
+                        entry.0 = true;
+                    }
+                    GitStatus::Untracked => {
+                        entry.1 = true;
+                    }
+                    _ => {}
+                }
+
+                current = dir.parent();
+            }
+        }
+
+        // Convert to GitStatus
+        for (dir, (has_modified, has_untracked)) in dir_statuses {
+            let status = if has_modified {
+                GitStatus::Modified
+            } else if has_untracked {
+                GitStatus::Untracked
+            } else {
+                GitStatus::None
+            };
+
+            if status != GitStatus::None {
+                self.dir_status_cache.insert(dir, status);
+            }
+        }
+    }
+
     pub fn get_status(&self, path: &Path) -> GitStatus {
-        // Direct match
+        // Direct match for files
         if let Some(&status) = self.statuses.get(path) {
             return status;
         }
 
-        // For directories, check if any child has a status
+        // For directories, use the cache
         if path.is_dir() {
-            let mut has_modified = false;
-            let mut has_untracked = false;
-
-            for (file_path, status) in &self.statuses {
-                if file_path.starts_with(path) {
-                    match status {
-                        GitStatus::Modified | GitStatus::Added | GitStatus::Deleted |
-                        GitStatus::Renamed | GitStatus::Conflict => {
-                            has_modified = true;
-                        }
-                        GitStatus::Untracked => {
-                            has_untracked = true;
-                        }
-                        _ => {}
-                    }
-                }
-            }
-
-            if has_modified {
-                return GitStatus::Modified;
-            }
-            if has_untracked {
-                return GitStatus::Untracked;
+            if let Some(&status) = self.dir_status_cache.get(path) {
+                return status;
             }
         }
 
