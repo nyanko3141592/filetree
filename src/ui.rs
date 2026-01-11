@@ -414,6 +414,18 @@ fn draw_preview(frame: &mut Frame, app: &App) -> usize {
 
 fn draw_image_preview(frame: &mut Frame, app: &App) -> usize {
     let area = frame.area();
+
+    // Safely get image preview, return early if not available
+    let img = match app.image_preview.as_ref() {
+        Some(img) => img,
+        None => {
+            let error = Paragraph::new("No image to display")
+                .block(Block::default().borders(Borders::ALL).title(" Error "));
+            frame.render_widget(error, area);
+            return area.height.saturating_sub(2) as usize;
+        }
+    };
+
     let is_wide = area.width > area.height * 2;
 
     // Decide layout: wide = side by side, narrow = stacked
@@ -437,9 +449,6 @@ fn draw_image_preview(frame: &mut Frame, app: &App) -> usize {
     if let Some(_tree_rect) = tree_area {
         // In wide mode, we could show the tree, but for simplicity just show image info
     }
-
-    // Draw image preview
-    let img = app.image_preview.as_ref().unwrap();
     let title = app.preview_path
         .as_ref()
         .map(|p| {

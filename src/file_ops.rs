@@ -1,4 +1,5 @@
-use std::fs;
+use std::fs::{self, OpenOptions};
+use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone)]
@@ -73,34 +74,59 @@ pub fn rename_file(path: &Path, new_name: &str) -> anyhow::Result<PathBuf> {
     let parent = path.parent().ok_or_else(|| anyhow::anyhow!("No parent directory"))?;
     let new_path = parent.join(new_name);
 
-    if new_path.exists() {
-        anyhow::bail!("File already exists: {}", new_path.display());
+    // Avoid renaming to the same path
+    if path == new_path {
+        return Ok(new_path);
     }
 
-    fs::rename(path, &new_path)?;
-    Ok(new_path)
+    // Try rename directly - avoids TOCTOU race condition
+    match fs::rename(path, &new_path) {
+        Ok(()) => Ok(new_path),
+        Err(e) if e.kind() == ErrorKind::AlreadyExists => {
+            anyhow::bail!("File already exists: {}", new_path.display())
+        }
+        Err(e) if e.kind() == ErrorKind::CrossesDevices => {
+            // Cross-device rename: check destination first, then copy+delete
+            if new_path.exists() {
+                anyhow::bail!("File already exists: {}", new_path.display());
+            }
+            if path.is_dir() {
+                copy_dir_recursive(path, &new_path)?;
+                fs::remove_dir_all(path)?;
+            } else {
+                fs::copy(path, &new_path)?;
+                fs::remove_file(path)?;
+            }
+            Ok(new_path)
+        }
+        Err(e) => Err(e.into()),
+    }
 }
 
 pub fn create_file(parent_dir: &Path, name: &str) -> anyhow::Result<PathBuf> {
     let path = parent_dir.join(name);
 
-    if path.exists() {
-        anyhow::bail!("File already exists: {}", path.display());
+    // Use create_new for atomic "create if not exists" - avoids TOCTOU race condition
+    match OpenOptions::new().write(true).create_new(true).open(&path) {
+        Ok(_) => Ok(path),
+        Err(e) if e.kind() == ErrorKind::AlreadyExists => {
+            anyhow::bail!("File already exists: {}", path.display())
+        }
+        Err(e) => Err(e.into()),
     }
-
-    fs::write(&path, "")?;
-    Ok(path)
 }
 
 pub fn create_directory(parent_dir: &Path, name: &str) -> anyhow::Result<PathBuf> {
     let path = parent_dir.join(name);
 
-    if path.exists() {
-        anyhow::bail!("Directory already exists: {}", path.display());
+    // fs::create_dir fails atomically if directory exists - avoids TOCTOU race condition
+    match fs::create_dir(&path) {
+        Ok(()) => Ok(path),
+        Err(e) if e.kind() == ErrorKind::AlreadyExists => {
+            anyhow::bail!("Directory already exists: {}", path.display())
+        }
+        Err(e) => Err(e.into()),
     }
-
-    fs::create_dir(&path)?;
-    Ok(path)
 }
 
 fn copy_dir_recursive(src: &Path, dest: &Path) -> anyhow::Result<()> {
