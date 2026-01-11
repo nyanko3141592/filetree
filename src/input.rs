@@ -48,8 +48,14 @@ fn handle_normal_mode(app: &mut App, key: KeyEvent) {
         }
 
         // Expand/Collapse
-        KeyCode::Enter | KeyCode::Char('l') => app.expand_current(),
-        KeyCode::Backspace | KeyCode::Char('h') => app.collapse_current(),
+        KeyCode::Enter | KeyCode::Char('l') | KeyCode::Right => {
+            app.expand_current();
+            app.update_quick_preview();
+        }
+        KeyCode::Backspace | KeyCode::Char('h') | KeyCode::Left => {
+            app.collapse_current();
+            app.update_quick_preview();
+        }
         KeyCode::Tab => app.toggle_expand(),
         KeyCode::Char('H') => app.collapse_all(),
         KeyCode::Char('L') => app.expand_all(),
