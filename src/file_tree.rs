@@ -310,3 +310,232 @@ impl FileTree {
         false
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs::File;
+    use tempfile::TempDir;
+
+    fn create_test_structure() -> TempDir {
+        let temp_dir = TempDir::new().unwrap();
+        let base = temp_dir.path();
+
+        // Create directories
+        fs::create_dir(base.join("dir_a")).unwrap();
+        fs::create_dir(base.join("dir_b")).unwrap();
+        fs::create_dir(base.join(".hidden_dir")).unwrap();
+
+        // Create files
+        File::create(base.join("file1.txt")).unwrap();
+        File::create(base.join("file2.rs")).unwrap();
+        File::create(base.join(".hidden_file")).unwrap();
+        File::create(base.join("dir_a/nested.txt")).unwrap();
+
+        temp_dir
+    }
+
+    #[test]
+    fn test_file_node_new_file() {
+        let temp_dir = create_test_structure();
+        let file_path = temp_dir.path().join("file1.txt");
+
+        let node = FileNode::new(file_path.clone(), 1);
+
+        assert_eq!(node.path, file_path);
+        assert_eq!(node.name, "file1.txt");
+        assert!(!node.is_dir);
+        assert!(!node.expanded);
+        assert_eq!(node.depth, 1);
+        assert!(node.children.is_empty());
+    }
+
+    #[test]
+    fn test_file_node_new_directory() {
+        let temp_dir = create_test_structure();
+        let dir_path = temp_dir.path().join("dir_a");
+
+        let node = FileNode::new(dir_path.clone(), 2);
+
+        assert_eq!(node.path, dir_path);
+        assert_eq!(node.name, "dir_a");
+        assert!(node.is_dir);
+        assert!(!node.expanded);
+        assert_eq!(node.depth, 2);
+    }
+
+    #[test]
+    fn test_file_node_load_children_excludes_hidden() {
+        let temp_dir = create_test_structure();
+        let mut node = FileNode::new(temp_dir.path().to_path_buf(), 0);
+
+        node.load_children(false).unwrap();
+
+        let names: Vec<&str> = node.children.iter().map(|c| c.name.as_str()).collect();
+        assert!(names.contains(&"dir_a"));
+        assert!(names.contains(&"dir_b"));
+        assert!(names.contains(&"file1.txt"));
+        assert!(!names.contains(&".hidden_dir"));
+        assert!(!names.contains(&".hidden_file"));
+    }
+
+    #[test]
+    fn test_file_node_load_children_includes_hidden() {
+        let temp_dir = create_test_structure();
+        let mut node = FileNode::new(temp_dir.path().to_path_buf(), 0);
+
+        node.load_children(true).unwrap();
+
+        let names: Vec<&str> = node.children.iter().map(|c| c.name.as_str()).collect();
+        assert!(names.contains(&"dir_a"));
+        assert!(names.contains(&".hidden_dir"));
+        assert!(names.contains(&".hidden_file"));
+    }
+
+    #[test]
+    fn test_file_node_load_children_sorts_dirs_first() {
+        let temp_dir = create_test_structure();
+        let mut node = FileNode::new(temp_dir.path().to_path_buf(), 0);
+
+        node.load_children(false).unwrap();
+
+        // Find first file index
+        let first_file_idx = node
+            .children
+            .iter()
+            .position(|c| !c.is_dir)
+            .unwrap_or(node.children.len());
+
+        // All items before first file should be directories
+        for child in node.children.iter().take(first_file_idx) {
+            assert!(child.is_dir, "{} should be a directory", child.name);
+        }
+
+        // All items from first file onward should be files
+        for child in node.children.iter().skip(first_file_idx) {
+            assert!(!child.is_dir, "{} should be a file", child.name);
+        }
+    }
+
+    #[test]
+    fn test_file_tree_new() {
+        let temp_dir = create_test_structure();
+
+        let tree = FileTree::new(temp_dir.path(), false).unwrap();
+
+        assert!(tree.root.expanded);
+        assert!(!tree.root.children.is_empty());
+        assert!(!tree.flat_list.is_empty());
+    }
+
+    #[test]
+    fn test_file_tree_len() {
+        let temp_dir = create_test_structure();
+        let tree = FileTree::new(temp_dir.path(), false).unwrap();
+
+        // Root + 2 dirs + 2 files (hidden excluded)
+        assert_eq!(tree.len(), 5);
+    }
+
+    #[test]
+    fn test_file_tree_get_node() {
+        let temp_dir = create_test_structure();
+        let tree = FileTree::new(temp_dir.path(), false).unwrap();
+
+        let node = tree.get_node(0);
+        assert!(node.is_some());
+        assert_eq!(node.unwrap().path, temp_dir.path());
+
+        let invalid = tree.get_node(1000);
+        assert!(invalid.is_none());
+    }
+
+    #[test]
+    fn test_file_tree_collapse_all() {
+        let temp_dir = create_test_structure();
+        let mut tree = FileTree::new(temp_dir.path(), false).unwrap();
+
+        // Expand a child directory first
+        if let Some(dir_idx) = (0..tree.len()).find(|&i| {
+            tree.get_node(i)
+                .map(|n| n.is_dir && n.name == "dir_a")
+                .unwrap_or(false)
+        }) {
+            tree.expand_node(dir_idx).unwrap();
+        }
+
+        tree.collapse_all();
+
+        // Root should still be expanded
+        assert!(tree.root.expanded);
+        // But children should be collapsed
+        for child in &tree.root.children {
+            assert!(!child.expanded);
+        }
+    }
+
+    #[test]
+    fn test_file_tree_set_show_hidden() {
+        let temp_dir = create_test_structure();
+        let mut tree = FileTree::new(temp_dir.path(), false).unwrap();
+
+        let count_without_hidden = tree.len();
+
+        tree.set_show_hidden(true).unwrap();
+
+        let count_with_hidden = tree.len();
+
+        assert!(count_with_hidden > count_without_hidden);
+    }
+
+    #[test]
+    fn test_file_tree_refresh() {
+        let temp_dir = create_test_structure();
+        let mut tree = FileTree::new(temp_dir.path(), false).unwrap();
+
+        let initial_len = tree.len();
+
+        // Create a new file
+        File::create(temp_dir.path().join("new_file.txt")).unwrap();
+
+        tree.refresh().unwrap();
+
+        assert_eq!(tree.len(), initial_len + 1);
+    }
+
+    #[test]
+    fn test_file_tree_expand_and_collapse_node() {
+        let temp_dir = create_test_structure();
+        let mut tree = FileTree::new(temp_dir.path(), false).unwrap();
+
+        // Find dir_a
+        let dir_idx = (0..tree.len())
+            .find(|&i| {
+                tree.get_node(i)
+                    .map(|n| n.is_dir && n.name == "dir_a")
+                    .unwrap_or(false)
+            })
+            .unwrap();
+
+        let len_before = tree.len();
+
+        // Expand
+        tree.expand_node(dir_idx).unwrap();
+        let len_after_expand = tree.len();
+        assert!(len_after_expand > len_before);
+
+        // Collapse
+        tree.collapse_node(dir_idx).unwrap();
+        let len_after_collapse = tree.len();
+        assert_eq!(len_after_collapse, len_before);
+    }
+
+    #[test]
+    fn test_file_tree_is_empty() {
+        let temp_dir = TempDir::new().unwrap();
+        let tree = FileTree::new(temp_dir.path(), false).unwrap();
+
+        // Tree has at least root
+        assert!(!tree.is_empty());
+    }
+}
