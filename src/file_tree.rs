@@ -38,15 +38,11 @@ impl FileNode {
         let mut entries: Vec<_> = fs::read_dir(&self.path)?
             .filter_map(|e| e.ok())
             .filter(|e| {
-                if show_hidden {
-                    true
-                } else {
-                    // Filter out hidden files (starting with .)
-                    e.file_name()
+                show_hidden
+                    || e.file_name()
                         .to_str()
                         .map(|s| !s.starts_with('.'))
                         .unwrap_or(true)
-                }
             })
             .collect();
 
