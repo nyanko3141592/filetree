@@ -176,7 +176,9 @@ fn handle_preview_mode(app: &mut App, key: KeyEvent, visible_height: usize) {
         KeyCode::Up | KeyCode::Char('k') => app.preview_scroll_up(),
         KeyCode::Down | KeyCode::Char('j') => app.preview_scroll_down(visible_height),
         KeyCode::PageUp | KeyCode::Char('b') => app.preview_page_up(visible_height),
-        KeyCode::PageDown | KeyCode::Char('f') | KeyCode::Char(' ') => app.preview_page_down(visible_height),
+        KeyCode::PageDown | KeyCode::Char('f') | KeyCode::Char(' ') => {
+            app.preview_page_down(visible_height)
+        }
         KeyCode::Char('g') => app.preview_scroll = 0,
         KeyCode::Char('G') => {
             app.preview_scroll = app.preview_content.len().saturating_sub(visible_height);

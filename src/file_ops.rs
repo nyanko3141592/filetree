@@ -22,6 +22,7 @@ impl Clipboard {
         self.content = Some(ClipboardContent::Cut(paths));
     }
 
+    #[allow(dead_code)]
     pub fn clear(&mut self) {
         self.content = None;
     }
@@ -32,7 +33,9 @@ impl Clipboard {
 }
 
 pub fn copy_file(src: &Path, dest_dir: &Path) -> anyhow::Result<PathBuf> {
-    let file_name = src.file_name().ok_or_else(|| anyhow::anyhow!("Invalid file name"))?;
+    let file_name = src
+        .file_name()
+        .ok_or_else(|| anyhow::anyhow!("Invalid file name"))?;
     let dest = dest_dir.join(file_name);
     let dest = get_unique_path(&dest);
 
@@ -45,7 +48,9 @@ pub fn copy_file(src: &Path, dest_dir: &Path) -> anyhow::Result<PathBuf> {
 }
 
 pub fn move_file(src: &Path, dest_dir: &Path) -> anyhow::Result<PathBuf> {
-    let file_name = src.file_name().ok_or_else(|| anyhow::anyhow!("Invalid file name"))?;
+    let file_name = src
+        .file_name()
+        .ok_or_else(|| anyhow::anyhow!("Invalid file name"))?;
     let dest = dest_dir.join(file_name);
     let dest = get_unique_path(&dest);
 
@@ -71,7 +76,9 @@ pub fn delete_file(path: &Path) -> anyhow::Result<()> {
 }
 
 pub fn rename_file(path: &Path, new_name: &str) -> anyhow::Result<PathBuf> {
-    let parent = path.parent().ok_or_else(|| anyhow::anyhow!("No parent directory"))?;
+    let parent = path
+        .parent()
+        .ok_or_else(|| anyhow::anyhow!("No parent directory"))?;
     let new_path = parent.join(new_name);
 
     // Avoid renaming to the same path
@@ -166,5 +173,183 @@ fn get_unique_path(path: &Path) -> PathBuf {
             return new_path;
         }
         counter += 1;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    static TEST_COUNTER: AtomicUsize = AtomicUsize::new(0);
+
+    fn setup_test_dir() -> PathBuf {
+        let id = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);
+        let test_dir = std::env::temp_dir().join(format!(
+            "ft_test_{}_{}_{}",
+            std::process::id(),
+            id,
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = fs::remove_dir_all(&test_dir);
+        fs::create_dir_all(&test_dir).unwrap();
+        test_dir
+    }
+
+    fn cleanup_test_dir(path: &Path) {
+        let _ = fs::remove_dir_all(path);
+    }
+
+    #[test]
+    fn test_create_file_success() {
+        let test_dir = setup_test_dir();
+        let result = create_file(&test_dir, "test.txt");
+        assert!(result.is_ok());
+        assert!(test_dir.join("test.txt").exists());
+        cleanup_test_dir(&test_dir);
+    }
+
+    #[test]
+    fn test_create_file_already_exists() {
+        let test_dir = setup_test_dir();
+        fs::write(test_dir.join("existing.txt"), "content").unwrap();
+        let result = create_file(&test_dir, "existing.txt");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("already exists"));
+        cleanup_test_dir(&test_dir);
+    }
+
+    #[test]
+    fn test_create_directory_success() {
+        let test_dir = setup_test_dir();
+        let result = create_directory(&test_dir, "subdir");
+        assert!(result.is_ok());
+        assert!(test_dir.join("subdir").is_dir());
+        cleanup_test_dir(&test_dir);
+    }
+
+    #[test]
+    fn test_create_directory_already_exists() {
+        let test_dir = setup_test_dir();
+        fs::create_dir(test_dir.join("existing_dir")).unwrap();
+        let result = create_directory(&test_dir, "existing_dir");
+        assert!(result.is_err());
+        cleanup_test_dir(&test_dir);
+    }
+
+    #[test]
+    fn test_copy_file_success() {
+        let test_dir = setup_test_dir();
+        let src = test_dir.join("source.txt");
+        fs::write(&src, "hello").unwrap();
+        let dest_dir = test_dir.join("dest");
+        fs::create_dir(&dest_dir).unwrap();
+
+        let result = copy_file(&src, &dest_dir);
+        assert!(result.is_ok());
+        assert!(dest_dir.join("source.txt").exists());
+        assert!(src.exists()); // Original still exists
+        cleanup_test_dir(&test_dir);
+    }
+
+    #[test]
+    fn test_copy_file_unique_name() {
+        let test_dir = setup_test_dir();
+        let src = test_dir.join("file.txt");
+        fs::write(&src, "content").unwrap();
+
+        // Create existing file in dest
+        fs::write(test_dir.join("file.txt"), "existing").unwrap();
+
+        let result = copy_file(&src, &test_dir);
+        assert!(result.is_ok());
+        let new_path = result.unwrap();
+        assert_eq!(new_path.file_name().unwrap(), "file_1.txt");
+        cleanup_test_dir(&test_dir);
+    }
+
+    #[test]
+    fn test_delete_file() {
+        let test_dir = setup_test_dir();
+        let file = test_dir.join("to_delete.txt");
+        fs::write(&file, "").unwrap();
+        assert!(file.exists());
+
+        let result = delete_file(&file);
+        assert!(result.is_ok());
+        assert!(!file.exists());
+        cleanup_test_dir(&test_dir);
+    }
+
+    #[test]
+    fn test_delete_directory() {
+        let test_dir = setup_test_dir();
+        let dir = test_dir.join("to_delete_dir");
+        fs::create_dir(&dir).unwrap();
+        fs::write(dir.join("file.txt"), "").unwrap();
+
+        let result = delete_file(&dir);
+        assert!(result.is_ok());
+        assert!(!dir.exists());
+        cleanup_test_dir(&test_dir);
+    }
+
+    #[test]
+    fn test_rename_file_success() {
+        let test_dir = setup_test_dir();
+        let file = test_dir.join("old_name.txt");
+        fs::write(&file, "content").unwrap();
+
+        let result = rename_file(&file, "new_name.txt");
+        assert!(result.is_ok());
+        assert!(!file.exists());
+        assert!(test_dir.join("new_name.txt").exists());
+        cleanup_test_dir(&test_dir);
+    }
+
+    #[test]
+    fn test_rename_file_same_name() {
+        let test_dir = setup_test_dir();
+        let file = test_dir.join("same.txt");
+        fs::write(&file, "content").unwrap();
+
+        let result = rename_file(&file, "same.txt");
+        assert!(result.is_ok());
+        assert!(file.exists());
+        cleanup_test_dir(&test_dir);
+    }
+
+    #[test]
+    fn test_move_file_success() {
+        let test_dir = setup_test_dir();
+        let src = test_dir.join("to_move.txt");
+        fs::write(&src, "content").unwrap();
+        let dest_dir = test_dir.join("dest");
+        fs::create_dir(&dest_dir).unwrap();
+
+        let result = move_file(&src, &dest_dir);
+        assert!(result.is_ok());
+        assert!(!src.exists()); // Original removed
+        assert!(dest_dir.join("to_move.txt").exists());
+        cleanup_test_dir(&test_dir);
+    }
+
+    #[test]
+    fn test_clipboard_operations() {
+        let mut clipboard = Clipboard::default();
+        assert!(clipboard.is_empty());
+
+        clipboard.copy(vec![PathBuf::from("/test/path")]);
+        assert!(!clipboard.is_empty());
+
+        clipboard.clear();
+        assert!(clipboard.is_empty());
+
+        clipboard.cut(vec![PathBuf::from("/test/path")]);
+        assert!(!clipboard.is_empty());
     }
 }

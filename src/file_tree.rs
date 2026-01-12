@@ -1,5 +1,5 @@
-use std::path::{Path, PathBuf};
 use std::fs;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone)]
 pub struct FileNode {
@@ -61,12 +61,14 @@ impl FileNode {
         });
 
         for entry in entries {
-            self.children.push(FileNode::new(entry.path(), self.depth + 1));
+            self.children
+                .push(FileNode::new(entry.path(), self.depth + 1));
         }
 
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn toggle_expand(&mut self, show_hidden: bool) -> anyhow::Result<()> {
         if !self.is_dir {
             return Ok(());
@@ -126,10 +128,12 @@ impl FileTree {
         self.nodes.get(index)
     }
 
+    #[allow(dead_code)]
     pub fn get_node_mut(&mut self, index: usize) -> Option<&mut FileNode> {
         self.nodes.get_mut(index)
     }
 
+    #[allow(dead_code)]
     pub fn toggle_expand(&mut self, index: usize) -> anyhow::Result<()> {
         let path = {
             let node = self.nodes.get(index);
@@ -143,7 +147,12 @@ impl FileTree {
         Ok(())
     }
 
-    fn toggle_expand_recursive(&mut self, node: &mut FileNode, target_path: &Path) -> anyhow::Result<bool> {
+    #[allow(dead_code)]
+    fn toggle_expand_recursive(
+        &mut self,
+        node: &mut FileNode,
+        target_path: &Path,
+    ) -> anyhow::Result<bool> {
         if node.path == target_path {
             node.toggle_expand(self.show_hidden)?;
             self.update_root(node.clone());
@@ -161,12 +170,14 @@ impl FileTree {
         Ok(false)
     }
 
+    #[allow(dead_code)]
     fn update_root(&mut self, new_root: FileNode) {
         if self.root.path == new_root.path {
             self.root = new_root;
         }
     }
 
+    #[allow(dead_code)]
     fn update_node_in_root(&mut self, _path: &Path, _node: FileNode) {
         // Will be rebuilt via rebuild_flat_list
     }
@@ -175,6 +186,7 @@ impl FileTree {
         self.nodes.len()
     }
 
+    #[allow(dead_code)]
     pub fn is_empty(&self) -> bool {
         self.nodes.is_empty()
     }
@@ -251,7 +263,11 @@ impl FileTree {
         Ok(())
     }
 
-    fn expand_path_recursive(node: &mut FileNode, target_path: &Path, show_hidden: bool) -> anyhow::Result<bool> {
+    fn expand_path_recursive(
+        node: &mut FileNode,
+        target_path: &Path,
+        show_hidden: bool,
+    ) -> anyhow::Result<bool> {
         if node.path == target_path {
             if !node.expanded {
                 node.expanded = true;

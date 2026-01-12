@@ -82,8 +82,7 @@ impl GitRepo {
             if output.status.success() {
                 let stdout = String::from_utf8_lossy(&output.stdout);
                 for line in stdout.lines() {
-                    if line.starts_with("!! ") {
-                        let file_path = &line[3..];
+                    if let Some(file_path) = line.strip_prefix("!! ") {
                         let full_path = root.join(file_path);
                         self.statuses.insert(full_path, GitStatus::Ignored);
                     }
@@ -100,11 +99,16 @@ impl GitRepo {
             // Walk up the directory tree for each changed file
             let mut current = file_path.parent();
             while let Some(dir) = current {
-                let entry = dir_statuses.entry(dir.to_path_buf()).or_insert((false, false));
+                let entry = dir_statuses
+                    .entry(dir.to_path_buf())
+                    .or_insert((false, false));
 
                 match status {
-                    GitStatus::Modified | GitStatus::Added | GitStatus::Deleted |
-                    GitStatus::Renamed | GitStatus::Conflict => {
+                    GitStatus::Modified
+                    | GitStatus::Added
+                    | GitStatus::Deleted
+                    | GitStatus::Renamed
+                    | GitStatus::Conflict => {
                         entry.0 = true;
                     }
                     GitStatus::Untracked => {
@@ -149,6 +153,7 @@ impl GitRepo {
         GitStatus::None
     }
 
+    #[allow(dead_code)]
     pub fn is_inside_repo(&self) -> bool {
         self.root.is_some()
     }
