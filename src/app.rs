@@ -160,22 +160,20 @@ impl App {
     }
 
     fn select_path(&mut self, path: &Path) {
-        for (i, _) in self.tree.flat_list.iter().enumerate() {
-            if let Some(node) = self.tree.get_node(i) {
-                if node.path == path {
-                    self.selected = i;
-                    return;
-                }
-            }
+        if let Some(idx) = (0..self.tree.len()).find(|&i| {
+            self.tree
+                .get_node(i)
+                .map(|n| n.path == path)
+                .unwrap_or(false)
+        }) {
+            self.selected = idx;
         }
     }
 
     pub fn toggle_mark(&mut self) {
         if let Some(node) = self.tree.get_node(self.selected) {
             let path = node.path.clone();
-            if self.marked.contains(&path) {
-                self.marked.remove(&path);
-            } else {
+            if !self.marked.remove(&path) {
                 self.marked.insert(path);
             }
         }
@@ -275,12 +273,6 @@ impl App {
     pub fn start_new_dir(&mut self) {
         self.input_buffer.clear();
         self.input_mode = InputMode::NewDir;
-    }
-
-    #[allow(dead_code)]
-    pub fn start_search(&mut self) {
-        self.input_buffer.clear();
-        self.input_mode = InputMode::Search;
     }
 
     pub fn confirm_delete(&mut self) {
@@ -451,38 +443,107 @@ impl App {
         }
     }
 
+    fn format_hex_preview(bytes: &[u8], max_lines: usize) -> Vec<String> {
+        bytes
+            .chunks(16)
+            .take(max_lines)
+            .map(|chunk| {
+                let hex: Vec<String> = chunk.iter().map(|b| format!("{:02x}", b)).collect();
+                let ascii: String = chunk
+                    .iter()
+                    .map(|&b| {
+                        if b.is_ascii_graphic() || b == b' ' {
+                            b as char
+                        } else {
+                            '.'
+                        }
+                    })
+                    .collect();
+                format!("{:<48} {}", hex.join(" "), ascii)
+            })
+            .collect()
+    }
+
+    fn format_dir_preview(path: &Path) -> Vec<String> {
+        let mut lines = vec!["[Directory]".to_string(), String::new()];
+
+        if let Ok(entries) = std::fs::read_dir(path) {
+            let mut files = 0;
+            let mut dirs = 0;
+            let mut hidden = 0;
+            let mut total_size: u64 = 0;
+
+            for entry in entries.filter_map(|e| e.ok()) {
+                let name = entry.file_name();
+                let is_hidden = name.to_str().map(|s| s.starts_with('.')).unwrap_or(false);
+
+                if is_hidden {
+                    hidden += 1;
+                }
+
+                if let Ok(meta) = entry.metadata() {
+                    if meta.is_dir() {
+                        dirs += 1;
+                    } else {
+                        files += 1;
+                        total_size += meta.len();
+                    }
+                }
+            }
+
+            lines.push(format!("  Files: {}", files));
+            lines.push(format!("  Directories: {}", dirs));
+            if hidden > 0 {
+                lines.push(format!("  Hidden: {}", hidden));
+            }
+            lines.push(format!("  Size: {}", Self::format_size(total_size)));
+        }
+
+        lines
+    }
+
+    fn format_size(bytes: u64) -> String {
+        const KB: u64 = 1024;
+        const MB: u64 = KB * 1024;
+        const GB: u64 = MB * 1024;
+
+        if bytes >= GB {
+            format!("{:.1} GB", bytes as f64 / GB as f64)
+        } else if bytes >= MB {
+            format!("{:.1} MB", bytes as f64 / MB as f64)
+        } else if bytes >= KB {
+            format!("{:.1} KB", bytes as f64 / KB as f64)
+        } else {
+            format!("{} B", bytes)
+        }
+    }
+
+    fn copy_to_system_clipboard(&mut self, text: &str) {
+        match arboard::Clipboard::new() {
+            Ok(mut clip) => {
+                if clip.set_text(text).is_ok() {
+                    self.message = Some(format!("Copied: {}", text));
+                } else {
+                    self.message = Some("Failed to copy to clipboard".to_string());
+                }
+            }
+            Err(_) => {
+                self.message = Some("Clipboard not available".to_string());
+            }
+        }
+    }
+
     pub fn copy_path(&mut self) {
         if let Some(node) = self.tree.get_node(self.selected) {
             let path_str = node.path.to_string_lossy().to_string();
-            match arboard::Clipboard::new() {
-                Ok(mut clip) => {
-                    if clip.set_text(&path_str).is_ok() {
-                        self.message = Some(format!("Copied: {}", path_str));
-                    } else {
-                        self.message = Some("Failed to copy to clipboard".to_string());
-                    }
-                }
-                Err(_) => {
-                    self.message = Some("Clipboard not available".to_string());
-                }
-            }
+            self.copy_to_system_clipboard(&path_str);
         }
     }
 
     pub fn copy_filename(&mut self) {
         if let Some(node) = self.tree.get_node(self.selected) {
-            match arboard::Clipboard::new() {
-                Ok(mut clip) => {
-                    if clip.set_text(&node.name).is_ok() {
-                        self.message = Some(format!("Copied: {}", node.name));
-                    } else {
-                        self.message = Some("Failed to copy to clipboard".to_string());
-                    }
-                }
-                Err(_) => {
-                    self.message = Some("Clipboard not available".to_string());
-                }
-            }
+            let name = node.name.clone();
+            self.copy_to_system_clipboard(&name);
         }
     }
 
@@ -517,26 +578,7 @@ impl App {
                 Err(e) => {
                     // Try to read as binary and show hex preview
                     if let Ok(bytes) = std::fs::read(&path) {
-                        let preview: Vec<String> = bytes
-                            .chunks(16)
-                            .take(100)
-                            .map(|chunk| {
-                                let hex: Vec<String> =
-                                    chunk.iter().map(|b| format!("{:02x}", b)).collect();
-                                let ascii: String = chunk
-                                    .iter()
-                                    .map(|&b| {
-                                        if b.is_ascii_graphic() || b == b' ' {
-                                            b as char
-                                        } else {
-                                            '.'
-                                        }
-                                    })
-                                    .collect();
-                                format!("{:<48} {}", hex.join(" "), ascii)
-                            })
-                            .collect();
-                        self.preview_content = preview;
+                        self.preview_content = Self::format_hex_preview(&bytes, 100);
                         self.preview_scroll = 0;
                         self.preview_path = Some(path);
                         self.image_preview = None;
@@ -609,7 +651,7 @@ impl App {
         };
 
         if node.is_dir {
-            self.quick_preview_content = vec!["[Directory]".to_string()];
+            self.quick_preview_content = Self::format_dir_preview(&node.path);
             self.quick_preview_path = Some(node.path.clone());
             self.quick_preview_scroll = 0;
             self.quick_preview_image = None;
@@ -651,25 +693,7 @@ impl App {
             Err(_) => {
                 // Try to read as binary and show hex preview
                 if let Ok(bytes) = std::fs::read(&path) {
-                    self.quick_preview_content = bytes
-                        .chunks(16)
-                        .take(50)
-                        .map(|chunk| {
-                            let hex: Vec<String> =
-                                chunk.iter().map(|b| format!("{:02x}", b)).collect();
-                            let ascii: String = chunk
-                                .iter()
-                                .map(|&b| {
-                                    if b.is_ascii_graphic() || b == b' ' {
-                                        b as char
-                                    } else {
-                                        '.'
-                                    }
-                                })
-                                .collect();
-                            format!("{:<48} {}", hex.join(" "), ascii)
-                        })
-                        .collect();
+                    self.quick_preview_content = Self::format_hex_preview(&bytes, 50);
                 } else {
                     self.quick_preview_content = vec!["[Cannot read file]".to_string()];
                 }
@@ -712,14 +736,6 @@ impl App {
     pub fn preview_page_down(&mut self, visible_height: usize) {
         let max_scroll = self.preview_content.len().saturating_sub(visible_height);
         self.preview_scroll = (self.preview_scroll + visible_height).min(max_scroll);
-    }
-
-    #[allow(dead_code)]
-    pub fn select_by_row(&mut self, row: u16) {
-        let index = self.scroll_offset + row as usize;
-        if index < self.tree.len() {
-            self.selected = index;
-        }
     }
 
     pub fn handle_click(&mut self, row: u16) {

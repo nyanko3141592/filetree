@@ -38,15 +38,11 @@ impl FileNode {
         let mut entries: Vec<_> = fs::read_dir(&self.path)?
             .filter_map(|e| e.ok())
             .filter(|e| {
-                if show_hidden {
-                    true
-                } else {
-                    // Filter out hidden files (starting with .)
-                    e.file_name()
+                show_hidden
+                    || e.file_name()
                         .to_str()
                         .map(|s| !s.starts_with('.'))
                         .unwrap_or(true)
-                }
             })
             .collect();
 
@@ -162,7 +158,6 @@ impl FileTree {
         if node.expanded {
             for child in &mut node.children {
                 if self.toggle_expand_recursive(child, target_path)? {
-                    self.update_node_in_root(&node.path, node.clone());
                     return Ok(true);
                 }
             }
@@ -175,11 +170,6 @@ impl FileTree {
         if self.root.path == new_root.path {
             self.root = new_root;
         }
-    }
-
-    #[allow(dead_code)]
-    fn update_node_in_root(&mut self, _path: &Path, _node: FileNode) {
-        // Will be rebuilt via rebuild_flat_list
     }
 
     pub fn len(&self) -> usize {
