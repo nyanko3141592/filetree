@@ -464,6 +464,60 @@ impl App {
             .collect()
     }
 
+    fn format_dir_preview(path: &Path) -> Vec<String> {
+        let mut lines = vec!["[Directory]".to_string(), String::new()];
+
+        if let Ok(entries) = std::fs::read_dir(path) {
+            let mut files = 0;
+            let mut dirs = 0;
+            let mut hidden = 0;
+            let mut total_size: u64 = 0;
+
+            for entry in entries.filter_map(|e| e.ok()) {
+                let name = entry.file_name();
+                let is_hidden = name.to_str().map(|s| s.starts_with('.')).unwrap_or(false);
+
+                if is_hidden {
+                    hidden += 1;
+                }
+
+                if let Ok(meta) = entry.metadata() {
+                    if meta.is_dir() {
+                        dirs += 1;
+                    } else {
+                        files += 1;
+                        total_size += meta.len();
+                    }
+                }
+            }
+
+            lines.push(format!("  Files: {}", files));
+            lines.push(format!("  Directories: {}", dirs));
+            if hidden > 0 {
+                lines.push(format!("  Hidden: {}", hidden));
+            }
+            lines.push(format!("  Size: {}", Self::format_size(total_size)));
+        }
+
+        lines
+    }
+
+    fn format_size(bytes: u64) -> String {
+        const KB: u64 = 1024;
+        const MB: u64 = KB * 1024;
+        const GB: u64 = MB * 1024;
+
+        if bytes >= GB {
+            format!("{:.1} GB", bytes as f64 / GB as f64)
+        } else if bytes >= MB {
+            format!("{:.1} MB", bytes as f64 / MB as f64)
+        } else if bytes >= KB {
+            format!("{:.1} KB", bytes as f64 / KB as f64)
+        } else {
+            format!("{} B", bytes)
+        }
+    }
+
     fn copy_to_system_clipboard(&mut self, text: &str) {
         match arboard::Clipboard::new() {
             Ok(mut clip) => {
@@ -597,7 +651,7 @@ impl App {
         };
 
         if node.is_dir {
-            self.quick_preview_content = vec!["[Directory]".to_string()];
+            self.quick_preview_content = Self::format_dir_preview(&node.path);
             self.quick_preview_path = Some(node.path.clone());
             self.quick_preview_scroll = 0;
             self.quick_preview_image = None;
