@@ -162,7 +162,6 @@ impl FileTree {
         if node.expanded {
             for child in &mut node.children {
                 if self.toggle_expand_recursive(child, target_path)? {
-                    self.update_node_in_root(&node.path, node.clone());
                     return Ok(true);
                 }
             }
@@ -175,11 +174,6 @@ impl FileTree {
         if self.root.path == new_root.path {
             self.root = new_root;
         }
-    }
-
-    #[allow(dead_code)]
-    fn update_node_in_root(&mut self, _path: &Path, _node: FileNode) {
-        // Will be rebuilt via rebuild_flat_list
     }
 
     pub fn len(&self) -> usize {

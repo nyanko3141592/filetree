@@ -277,12 +277,6 @@ impl App {
         self.input_mode = InputMode::NewDir;
     }
 
-    #[allow(dead_code)]
-    pub fn start_search(&mut self) {
-        self.input_buffer.clear();
-        self.input_mode = InputMode::Search;
-    }
-
     pub fn confirm_delete(&mut self) {
         let paths = self.get_selected_paths();
         if !paths.is_empty() {
@@ -712,14 +706,6 @@ impl App {
     pub fn preview_page_down(&mut self, visible_height: usize) {
         let max_scroll = self.preview_content.len().saturating_sub(visible_height);
         self.preview_scroll = (self.preview_scroll + visible_height).min(max_scroll);
-    }
-
-    #[allow(dead_code)]
-    pub fn select_by_row(&mut self, row: u16) {
-        let index = self.scroll_offset + row as usize;
-        if index < self.tree.len() {
-            self.selected = index;
-        }
     }
 
     pub fn handle_click(&mut self, row: u16) {
