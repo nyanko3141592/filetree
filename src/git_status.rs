@@ -200,3 +200,71 @@ fn get_current_branch(root: &Path) -> Option<String> {
         None
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_status_untracked() {
+        assert_eq!(parse_status('?', '?'), GitStatus::Untracked);
+    }
+
+    #[test]
+    fn test_parse_status_ignored() {
+        assert_eq!(parse_status('!', '!'), GitStatus::Ignored);
+    }
+
+    #[test]
+    fn test_parse_status_added() {
+        assert_eq!(parse_status('A', ' '), GitStatus::Added);
+        assert_eq!(parse_status('A', 'M'), GitStatus::Added);
+    }
+
+    #[test]
+    fn test_parse_status_modified() {
+        assert_eq!(parse_status('M', ' '), GitStatus::Modified);
+        assert_eq!(parse_status(' ', 'M'), GitStatus::Modified);
+        assert_eq!(parse_status('M', 'M'), GitStatus::Modified);
+    }
+
+    #[test]
+    fn test_parse_status_deleted() {
+        assert_eq!(parse_status('D', ' '), GitStatus::Deleted);
+        assert_eq!(parse_status(' ', 'D'), GitStatus::Deleted);
+    }
+
+    #[test]
+    fn test_parse_status_renamed() {
+        assert_eq!(parse_status('R', ' '), GitStatus::Renamed);
+        assert_eq!(parse_status('R', 'M'), GitStatus::Renamed);
+    }
+
+    #[test]
+    fn test_parse_status_conflict() {
+        assert_eq!(parse_status('U', ' '), GitStatus::Conflict);
+        assert_eq!(parse_status(' ', 'U'), GitStatus::Conflict);
+        assert_eq!(parse_status('U', 'U'), GitStatus::Conflict);
+        assert_eq!(parse_status('A', 'A'), GitStatus::Conflict);
+        assert_eq!(parse_status('D', 'D'), GitStatus::Conflict);
+    }
+
+    #[test]
+    fn test_parse_status_none() {
+        assert_eq!(parse_status(' ', ' '), GitStatus::None);
+    }
+
+    #[test]
+    fn test_git_status_default() {
+        assert_eq!(GitStatus::default(), GitStatus::None);
+    }
+
+    #[test]
+    fn test_git_repo_default() {
+        let repo = GitRepo::default();
+        assert!(repo.root.is_none());
+        assert!(repo.statuses.is_empty());
+        assert!(repo.dir_status_cache.is_empty());
+        assert!(repo.branch.is_none());
+    }
+}
