@@ -19,12 +19,6 @@ fn handle_normal_mode(app: &mut App, key: KeyEvent) {
         app.message = None;
     }
 
-    // Handle Ctrl+p for quick preview toggle
-    if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('p') {
-        app.toggle_quick_preview();
-        return;
-    }
-
     match key.code {
         // Quit
         KeyCode::Char('q') => app.should_quit = true,
@@ -98,10 +92,11 @@ fn handle_normal_mode(app: &mut App, key: KeyEvent) {
 
         // Preview file
         KeyCode::Char('o') => app.preview_file(),
+        KeyCode::Char('P') => app.toggle_quick_preview(),
 
         // Help
         KeyCode::Char('?') => {
-            app.message = Some("o:preview  ^p:quick  c:path  C:name  y:yank  d:cut  p:paste  D:del  r:rename  a:file  A:dir".to_string());
+            app.message = Some("o:preview  P:quick  c:path  C:name  y:yank  d:cut  p:paste  D:del  r:rename  a:file  A:dir".to_string());
         }
 
         // Buffer unknown chars for drop detection

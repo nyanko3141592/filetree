@@ -76,7 +76,7 @@ ft ~/Documents  # Specific directory
 | `r` | Rename |
 | `a` / `A` | New file / directory |
 | `o` | Preview file (full screen) |
-| `Ctrl+p` | Toggle quick preview panel |
+| `P` | Toggle quick preview panel |
 
 ### View
 
