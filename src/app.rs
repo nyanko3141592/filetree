@@ -241,7 +241,10 @@ impl App {
             if node.is_dir {
                 node.path.clone()
             } else {
-                node.path.parent().map(|p| p.to_path_buf()).unwrap_or_else(|| node.path.clone())
+                node.path
+                    .parent()
+                    .map(|p| p.to_path_buf())
+                    .unwrap_or_else(|| node.path.clone())
             }
         })
     }
@@ -274,6 +277,7 @@ impl App {
         self.input_mode = InputMode::NewDir;
     }
 
+    #[allow(dead_code)]
     pub fn start_search(&mut self) {
         self.input_buffer.clear();
         self.input_mode = InputMode::Search;
@@ -517,9 +521,17 @@ impl App {
                             .chunks(16)
                             .take(100)
                             .map(|chunk| {
-                                let hex: Vec<String> = chunk.iter().map(|b| format!("{:02x}", b)).collect();
-                                let ascii: String = chunk.iter()
-                                    .map(|&b| if b.is_ascii_graphic() || b == b' ' { b as char } else { '.' })
+                                let hex: Vec<String> =
+                                    chunk.iter().map(|b| format!("{:02x}", b)).collect();
+                                let ascii: String = chunk
+                                    .iter()
+                                    .map(|&b| {
+                                        if b.is_ascii_graphic() || b == b' ' {
+                                            b as char
+                                        } else {
+                                            '.'
+                                        }
+                                    })
                                     .collect();
                                 format!("{:<48} {}", hex.join(" "), ascii)
                             })
@@ -552,10 +564,7 @@ impl App {
         let img = image::open(path).map_err(|e| e.to_string())?;
         let img = img.to_rgb8();
         let (width, height) = img.dimensions();
-        let pixels: Vec<(u8, u8, u8)> = img
-            .pixels()
-            .map(|p| (p[0], p[1], p[2]))
-            .collect();
+        let pixels: Vec<(u8, u8, u8)> = img.pixels().map(|p| (p[0], p[1], p[2])).collect();
 
         self.image_preview = Some(ImagePreview {
             width,
@@ -619,10 +628,7 @@ impl App {
             if let Ok(img) = image::open(&path) {
                 let img = img.to_rgb8();
                 let (width, height) = img.dimensions();
-                let pixels: Vec<(u8, u8, u8)> = img
-                    .pixels()
-                    .map(|p| (p[0], p[1], p[2]))
-                    .collect();
+                let pixels: Vec<(u8, u8, u8)> = img.pixels().map(|p| (p[0], p[1], p[2])).collect();
 
                 self.quick_preview_image = Some(ImagePreview {
                     width,
@@ -649,9 +655,17 @@ impl App {
                         .chunks(16)
                         .take(50)
                         .map(|chunk| {
-                            let hex: Vec<String> = chunk.iter().map(|b| format!("{:02x}", b)).collect();
-                            let ascii: String = chunk.iter()
-                                .map(|&b| if b.is_ascii_graphic() || b == b' ' { b as char } else { '.' })
+                            let hex: Vec<String> =
+                                chunk.iter().map(|b| format!("{:02x}", b)).collect();
+                            let ascii: String = chunk
+                                .iter()
+                                .map(|&b| {
+                                    if b.is_ascii_graphic() || b == b' ' {
+                                        b as char
+                                    } else {
+                                        '.'
+                                    }
+                                })
                                 .collect();
                             format!("{:<48} {}", hex.join(" "), ascii)
                         })
@@ -665,12 +679,14 @@ impl App {
         self.quick_preview_scroll = 0;
     }
 
+    #[allow(dead_code)]
     pub fn quick_preview_scroll_up(&mut self) {
         if self.quick_preview_scroll > 0 {
             self.quick_preview_scroll -= 1;
         }
     }
 
+    #[allow(dead_code)]
     pub fn quick_preview_scroll_down(&mut self, visible_height: usize) {
         if self.quick_preview_scroll + visible_height < self.quick_preview_content.len() {
             self.quick_preview_scroll += 1;
@@ -698,6 +714,7 @@ impl App {
         self.preview_scroll = (self.preview_scroll + visible_height).min(max_scroll);
     }
 
+    #[allow(dead_code)]
     pub fn select_by_row(&mut self, row: u16) {
         let index = self.scroll_offset + row as usize;
         if index < self.tree.len() {
@@ -790,15 +807,10 @@ impl App {
         }
 
         // Not a valid path, treat first char as command
-        if let Some(first) = text.chars().next() {
-            match first {
-                '/' => {
-                    // Start search with remaining chars
-                    self.input_buffer = text[1..].to_string();
-                    self.input_mode = InputMode::Search;
-                }
-                _ => {}
-            }
+        if let Some(rest) = text.strip_prefix('/') {
+            // Start search with remaining chars
+            self.input_buffer = rest.to_string();
+            self.input_mode = InputMode::Search;
         }
     }
 
@@ -822,7 +834,21 @@ impl App {
             if c == '\\' {
                 if let Some(&next) = chars.peek() {
                     // Common escaped characters in shell paths
-                    if matches!(next, ' ' | '\'' | '"' | '\\' | '(' | ')' | '[' | ']' | '&' | ';' | '!' | '$' | '`') {
+                    if matches!(
+                        next,
+                        ' ' | '\''
+                            | '"'
+                            | '\\'
+                            | '('
+                            | ')'
+                            | '['
+                            | ']'
+                            | '&'
+                            | ';'
+                            | '!'
+                            | '$'
+                            | '`'
+                    ) {
                         result.push(chars.next().unwrap());
                         continue;
                     }
@@ -856,7 +882,10 @@ impl App {
 
             match file_ops::copy_file(&path, &dest_dir) {
                 Ok(_) => {
-                    self.message = Some(format!("Dropped: {}", path.file_name().unwrap_or_default().to_string_lossy()));
+                    self.message = Some(format!(
+                        "Dropped: {}",
+                        path.file_name().unwrap_or_default().to_string_lossy()
+                    ));
                     let _ = self.tree.refresh();
                     return true;
                 }
@@ -911,10 +940,8 @@ impl App {
 
         let mut success = 0;
         for path in &paths {
-            if path.exists() {
-                if file_ops::copy_file(path, &dest_dir).is_ok() {
-                    success += 1;
-                }
+            if path.exists() && file_ops::copy_file(path, &dest_dir).is_ok() {
+                success += 1;
             }
         }
 

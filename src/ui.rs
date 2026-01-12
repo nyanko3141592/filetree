@@ -60,14 +60,14 @@ fn draw_file_tree(frame: &mut Frame, app: &mut App, area: Rect) {
             let indent = "  ".repeat(node.depth);
 
             let icon = if node.is_dir {
-                if node.expanded { "" } else { "" }
+                if node.expanded { "\u{f07c}" } else { "\u{f07b}" }
             } else {
                 get_file_icon(&node.name)
             };
 
             let is_selected = i == app.selected;
             let is_marked = app.marked.contains(&node.path);
-            let is_cut = app.clipboard.content.as_ref().map_or(false, |c| {
+            let is_cut = app.clipboard.content.as_ref().is_some_and(|c| {
                 matches!(c, crate::file_ops::ClipboardContent::Cut(paths) if paths.contains(&node.path))
             });
             let git_status = app.git_repo.get_status(&node.path);
@@ -110,9 +110,11 @@ fn draw_file_tree(frame: &mut Frame, app: &mut App, area: Rect) {
         .collect();
 
     let max_title_width = area.width.saturating_sub(4) as usize; // Account for borders and padding
-    let title = format!(" {} ", abbreviate_path(&app.tree.root.path, max_title_width));
-    let list = List::new(items)
-        .block(Block::default().borders(Borders::ALL).title(title));
+    let title = format!(
+        " {} ",
+        abbreviate_path(&app.tree.root.path, max_title_width)
+    );
+    let list = List::new(items).block(Block::default().borders(Borders::ALL).title(title));
 
     frame.render_widget(list, area);
 }
@@ -125,8 +127,7 @@ fn draw_status_bar(frame: &mut Frame, app: &App, area: Rect) {
 
     // Left: message or help
     let message = app.message.as_deref().unwrap_or("? for help");
-    let msg = Paragraph::new(message)
-        .block(Block::default().borders(Borders::ALL));
+    let msg = Paragraph::new(message).block(Block::default().borders(Borders::ALL));
     frame.render_widget(msg, chunks[0]);
 
     // Right: stats
@@ -141,7 +142,10 @@ fn draw_status_bar(frame: &mut Frame, app: &App, area: Rect) {
         }
     };
 
-    let branch_info = app.git_repo.branch.as_ref()
+    let branch_info = app
+        .git_repo
+        .branch
+        .as_ref()
         .map(|b| format!(" {}", b))
         .unwrap_or_default();
 
@@ -149,22 +153,27 @@ fn draw_status_bar(frame: &mut Frame, app: &App, area: Rect) {
         "{}/{}{}{}{}",
         app.selected + 1,
         app.tree.len(),
-        if marked_count > 0 { format!(" | Marked: {}", marked_count) } else { String::new() },
+        if marked_count > 0 {
+            format!(" | Marked: {}", marked_count)
+        } else {
+            String::new()
+        },
         clipboard_info,
         branch_info
     );
-    let stats_widget = Paragraph::new(stats)
-        .block(Block::default().borders(Borders::ALL));
+    let stats_widget = Paragraph::new(stats).block(Block::default().borders(Borders::ALL));
     frame.render_widget(stats_widget, chunks[1]);
 }
 
 fn draw_quick_preview(frame: &mut Frame, app: &App, area: Rect) {
     // If we have an image preview, render it
     if let Some(img) = &app.quick_preview_image {
-        let title = app.quick_preview_path
+        let title = app
+            .quick_preview_path
             .as_ref()
             .map(|p| {
-                let name = p.file_name()
+                let name = p
+                    .file_name()
                     .map(|n| n.to_string_lossy().to_string())
                     .unwrap_or_default();
                 format!(" {} ({}x{}) [Ctrl+p: close] ", name, img.width, img.height)
@@ -176,8 +185,8 @@ fn draw_quick_preview(frame: &mut Frame, app: &App, area: Rect) {
 
         let lines = render_image_to_lines(img, img_width, img_height);
 
-        let preview = Paragraph::new(lines)
-            .block(Block::default().borders(Borders::ALL).title(title));
+        let preview =
+            Paragraph::new(lines).block(Block::default().borders(Borders::ALL).title(title));
 
         frame.render_widget(preview, area);
         return;
@@ -185,17 +194,20 @@ fn draw_quick_preview(frame: &mut Frame, app: &App, area: Rect) {
 
     let visible_height = area.height.saturating_sub(2) as usize;
 
-    let title = app.quick_preview_path
+    let title = app
+        .quick_preview_path
         .as_ref()
         .map(|p| {
-            let name = p.file_name()
+            let name = p
+                .file_name()
                 .map(|n| n.to_string_lossy().to_string())
                 .unwrap_or_default();
             format!(" {} [Ctrl+p: close] ", name)
         })
         .unwrap_or_else(|| " Quick Preview ".to_string());
 
-    let lines: Vec<Line> = app.quick_preview_content
+    let lines: Vec<Line> = app
+        .quick_preview_content
         .iter()
         .skip(app.quick_preview_scroll)
         .take(visible_height)
@@ -212,8 +224,7 @@ fn draw_quick_preview(frame: &mut Frame, app: &App, area: Rect) {
         })
         .collect();
 
-    let preview = Paragraph::new(lines)
-        .block(Block::default().borders(Borders::ALL).title(title));
+    let preview = Paragraph::new(lines).block(Block::default().borders(Borders::ALL).title(title));
 
     frame.render_widget(preview, area);
 }
@@ -260,30 +271,24 @@ fn draw_delete_confirm_popup(frame: &mut Frame, info: &DeleteInfo) {
 
     // Directory warning (emphasized)
     if info.has_directories {
-        content.push(Line::from(vec![
-            Span::styled(
-                "!! WARNING: FOLDER DELETION !!",
-                Style::default()
-                    .fg(Color::Red)
-                    .add_modifier(Modifier::BOLD | Modifier::SLOW_BLINK),
-            ),
-        ]));
-        content.push(Line::from(vec![
-            Span::styled(
-                "Folders and all contents will be permanently deleted",
-                Style::default().fg(Color::Yellow),
-            ),
-        ]));
+        content.push(Line::from(vec![Span::styled(
+            "!! WARNING: FOLDER DELETION !!",
+            Style::default()
+                .fg(Color::Red)
+                .add_modifier(Modifier::BOLD | Modifier::SLOW_BLINK),
+        )]));
+        content.push(Line::from(vec![Span::styled(
+            "Folders and all contents will be permanently deleted",
+            Style::default().fg(Color::Yellow),
+        )]));
         content.push(Line::from(""));
     }
 
     // List items to delete
-    content.push(Line::from(vec![
-        Span::styled(
-            format!("Delete {} item(s):", info.paths.len()),
-            Style::default().add_modifier(Modifier::BOLD),
-        ),
-    ]));
+    content.push(Line::from(vec![Span::styled(
+        format!("Delete {} item(s):", info.paths.len()),
+        Style::default().add_modifier(Modifier::BOLD),
+    )]));
 
     for path in info.paths.iter().take(max_items_to_show) {
         let name = path
@@ -292,7 +297,10 @@ fn draw_delete_confirm_popup(frame: &mut Frame, info: &DeleteInfo) {
             .unwrap_or_else(|| path.display().to_string());
 
         let (icon, style) = if path.is_dir() {
-            ("", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD))
+            (
+                "",
+                Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+            )
         } else {
             ("", Style::default().fg(Color::White))
         };
@@ -304,19 +312,25 @@ fn draw_delete_confirm_popup(frame: &mut Frame, info: &DeleteInfo) {
     }
 
     if has_more {
-        content.push(Line::from(vec![
-            Span::styled(
-                format!("  ... and {} more", info.paths.len() - max_items_to_show),
-                Style::default().fg(Color::DarkGray),
-            ),
-        ]));
+        content.push(Line::from(vec![Span::styled(
+            format!("  ... and {} more", info.paths.len() - max_items_to_show),
+            Style::default().fg(Color::DarkGray),
+        )]));
     }
 
     content.push(Line::from(""));
     content.push(Line::from(vec![
-        Span::styled("y", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            "y",
+            Style::default()
+                .fg(Color::Green)
+                .add_modifier(Modifier::BOLD),
+        ),
         Span::raw(" to confirm, "),
-        Span::styled("n", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            "n",
+            Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+        ),
         Span::raw(" to cancel"),
     ]));
 
@@ -332,17 +346,16 @@ fn draw_delete_confirm_popup(frame: &mut Frame, info: &DeleteInfo) {
         Style::default()
     };
 
-    let popup = Paragraph::new(content)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_style(if info.has_directories {
-                    Style::default().fg(Color::Red)
-                } else {
-                    Style::default()
-                })
-                .title(Span::styled(title, title_style)),
-        );
+    let popup = Paragraph::new(content).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_style(if info.has_directories {
+                Style::default().fg(Color::Red)
+            } else {
+                Style::default()
+            })
+            .title(Span::styled(title, title_style)),
+    );
 
     frame.render_widget(Clear, area);
     frame.render_widget(popup, area);
@@ -356,20 +369,19 @@ fn draw_preview(frame: &mut Frame, app: &App) -> usize {
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Min(3),
-            Constraint::Length(1),
-        ])
+        .constraints([Constraint::Min(3), Constraint::Length(1)])
         .split(frame.area());
 
     let visible_height = chunks[0].height.saturating_sub(2) as usize;
 
-    let title = app.preview_path
+    let title = app
+        .preview_path
         .as_ref()
         .map(|p| format!(" {} ", p.display()))
         .unwrap_or_else(|| " Preview ".to_string());
 
-    let lines: Vec<Line> = app.preview_content
+    let lines: Vec<Line> = app
+        .preview_content
         .iter()
         .skip(app.preview_scroll)
         .take(visible_height)
@@ -386,8 +398,7 @@ fn draw_preview(frame: &mut Frame, app: &App) -> usize {
         })
         .collect();
 
-    let preview = Paragraph::new(lines)
-        .block(Block::default().borders(Borders::ALL).title(title));
+    let preview = Paragraph::new(lines).block(Block::default().borders(Borders::ALL).title(title));
 
     frame.render_widget(preview, chunks[0]);
 
@@ -404,8 +415,7 @@ fn draw_preview(frame: &mut Frame, app: &App) -> usize {
         " Line {}/{} ({}%) | j/k:scroll  f/b:page  g/G:top/bottom  q/Esc:close ",
         current_line, total_lines, percent
     );
-    let status_widget = Paragraph::new(status)
-        .style(Style::default().bg(Color::DarkGray));
+    let status_widget = Paragraph::new(status).style(Style::default().bg(Color::DarkGray));
 
     frame.render_widget(status_widget, chunks[1]);
 
@@ -414,6 +424,18 @@ fn draw_preview(frame: &mut Frame, app: &App) -> usize {
 
 fn draw_image_preview(frame: &mut Frame, app: &App) -> usize {
     let area = frame.area();
+
+    // Safely get image preview, return early if not available
+    let img = match app.image_preview.as_ref() {
+        Some(img) => img,
+        None => {
+            let error = Paragraph::new("No image to display")
+                .block(Block::default().borders(Borders::ALL).title(" Error "));
+            frame.render_widget(error, area);
+            return area.height.saturating_sub(2) as usize;
+        }
+    };
+
     let is_wide = area.width > area.height * 2;
 
     // Decide layout: wide = side by side, narrow = stacked
@@ -437,13 +459,12 @@ fn draw_image_preview(frame: &mut Frame, app: &App) -> usize {
     if let Some(_tree_rect) = tree_area {
         // In wide mode, we could show the tree, but for simplicity just show image info
     }
-
-    // Draw image preview
-    let img = app.image_preview.as_ref().unwrap();
-    let title = app.preview_path
+    let title = app
+        .preview_path
         .as_ref()
         .map(|p| {
-            let name = p.file_name()
+            let name = p
+                .file_name()
                 .map(|n| n.to_string_lossy().to_string())
                 .unwrap_or_default();
             format!(" {} ({}x{}) ", name, img.width, img.height)
@@ -456,31 +477,26 @@ fn draw_image_preview(frame: &mut Frame, app: &App) -> usize {
 
     let lines = render_image_to_lines(img, img_width, img_height);
 
-    let preview = Paragraph::new(lines)
-        .block(Block::default().borders(Borders::ALL).title(title));
+    let preview = Paragraph::new(lines).block(Block::default().borders(Borders::ALL).title(title));
 
     frame.render_widget(preview, image_area);
 
     // Status bar at bottom
-    let status_area = if is_wide {
-        Rect::new(area.x, area.height - 1, area.width, 1)
-    } else {
-        Rect::new(area.x, area.height - 1, area.width, 1)
-    };
+    let status_area = Rect::new(area.x, area.height - 1, area.width, 1);
 
-    let status = format!(
-        " {}x{} | q/Esc:close ",
-        img.width, img.height
-    );
-    let status_widget = Paragraph::new(status)
-        .style(Style::default().bg(Color::DarkGray));
+    let status = format!(" {}x{} | q/Esc:close ", img.width, img.height);
+    let status_widget = Paragraph::new(status).style(Style::default().bg(Color::DarkGray));
 
     frame.render_widget(status_widget, status_area);
 
     image_area.height.saturating_sub(2) as usize
 }
 
-fn render_image_to_lines(img: &ImagePreview, target_width: u32, target_height: u32) -> Vec<Line<'static>> {
+fn render_image_to_lines(
+    img: &ImagePreview,
+    target_width: u32,
+    target_height: u32,
+) -> Vec<Line<'static>> {
     if target_width == 0 || target_height == 0 || img.width == 0 || img.height == 0 {
         return vec![Line::from("Image too small to display")];
     }
@@ -520,7 +536,8 @@ fn render_image_to_lines(img: &ImagePreview, target_width: u32, target_height: u
             // Map terminal position to source image position
             let src_x = ((col as f32 / display_width as f32) * img.width as f32) as u32;
             let src_y_top = ((row as f32 * 2.0 / display_height as f32) * img.height as f32) as u32;
-            let src_y_bottom = (((row as f32 * 2.0 + 1.0) / display_height as f32) * img.height as f32) as u32;
+            let src_y_bottom =
+                (((row as f32 * 2.0 + 1.0) / display_height as f32) * img.height as f32) as u32;
 
             let src_x = src_x.min(img.width - 1);
             let src_y_top = src_y_top.min(img.height - 1);

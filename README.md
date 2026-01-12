@@ -1,5 +1,6 @@
 # ft - File Tree Explorer
 
+[![CI](https://github.com/nyanko3141592/filetree/actions/workflows/ci.yml/badge.svg)](https://github.com/nyanko3141592/filetree/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Rust](https://img.shields.io/badge/Rust-1.70%2B-orange.svg)](https://www.rust-lang.org/)
 
@@ -55,9 +56,9 @@ ft ~/Documents  # Specific directory
 
 | Key | Action |
 |-----|--------|
-| `j` / `k` | Move down / up |
-| `l` / `Enter` | Expand directory |
-| `h` / `Backspace` | Collapse / Go to parent |
+| `↑` / `↓` or `j` / `k` | Move up / down |
+| `→` or `l` / `Enter` | Expand directory |
+| `←` or `h` / `Backspace` | Collapse / Go to parent |
 | `g` / `G` | Jump to top / bottom |
 | `Tab` | Toggle expand/collapse |
 | `H` | Collapse all |
@@ -74,7 +75,8 @@ ft ~/Documents  # Specific directory
 | `D` | Delete |
 | `r` | Rename |
 | `a` / `A` | New file / directory |
-| `o` | Preview file |
+| `o` | Preview file (full screen) |
+| `Ctrl+p` | Toggle quick preview panel |
 
 ### View
 
