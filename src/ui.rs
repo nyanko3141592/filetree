@@ -37,7 +37,7 @@ pub fn draw(frame: &mut Frame, app: &mut App) -> usize {
 
     // Draw input popup if in input mode
     match &app.input_mode {
-        InputMode::Search | InputMode::Rename | InputMode::NewFile | InputMode::NewDir => {
+        InputMode::Search | InputMode::Rename | InputMode::NewFile | InputMode::NewDir | InputMode::ExternalCommand => {
             draw_input_popup(frame, app);
         }
         InputMode::Confirm(action) => {
@@ -237,6 +237,7 @@ fn draw_input_popup(frame: &mut Frame, app: &App) {
         InputMode::Rename => "Rename",
         InputMode::NewFile => "New File",
         InputMode::NewDir => "New Directory",
+        InputMode::ExternalCommand => "External Command (use <filepath> for selected file)",
         _ => "",
     };
 

@@ -22,6 +22,7 @@ pub enum InputMode {
     NewDir,
     Confirm(ConfirmAction),
     Preview,
+    ExternalCommand,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -64,10 +65,13 @@ pub struct App {
     // Drop detection
     pub drop_buffer: String,
     pub last_char_time: std::time::Instant,
+    // External command execution
+    pub last_command: Option<String>,
+    pub default_command: Option<String>,
 }
 
 impl App {
-    pub fn new(path: &Path) -> anyhow::Result<Self> {
+    pub fn new(path: &Path, default_command: Option<String>) -> anyhow::Result<Self> {
         let show_hidden = false;
         let tree = FileTree::new(path, show_hidden)?;
         let git_repo = GitRepo::new(path);
@@ -97,6 +101,8 @@ impl App {
             quick_preview_image: None,
             drop_buffer: String::new(),
             last_char_time: std::time::Instant::now(),
+            last_command: None,
+            default_command,
         })
     }
 
@@ -356,6 +362,10 @@ impl App {
                     return;
                 }
                 self.search_next();
+            }
+            InputMode::ExternalCommand => {
+                let command = self.input_buffer.clone();
+                self.execute_external_command(Some(command));
             }
             InputMode::Confirm(ConfirmAction::Delete(_)) => {
                 self.execute_delete();
@@ -1035,5 +1045,59 @@ impl App {
         }
 
         paths
+    }
+
+    pub fn execute_external_command(&mut self, command_override: Option<String>) {
+        // Determine which command to use
+        let command_template = command_override
+            .as_ref()
+            .or(self.last_command.as_ref())
+            .or(self.default_command.as_ref());
+
+        let command_template = match command_template {
+            Some(cmd) => cmd,
+            None => {
+                self.message = Some("No command available. Enter a command first.".to_string());
+                return;
+            }
+        };
+
+        // Get the selected file path
+        let filepath = match self.tree.get_node(self.selected) {
+            Some(node) => node.path.to_string_lossy().to_string(),
+            None => {
+                self.message = Some("No file selected".to_string());
+                return;
+            }
+        };
+
+        // Replace <filepath> placeholder with actual path (quoted)
+        let command = command_template.replace("<filepath>", &format!("'{}'", filepath));
+
+        // Execute the command with stdout/stderr redirected to null to prevent terminal corruption
+        match std::process::Command::new("sh")
+            .arg("-c")
+            .arg(&command)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+        {
+            Ok(_) => {
+                self.message = Some(format!("Executed: {}", command));
+                // Save the command for next time
+                if let Some(cmd) = command_override {
+                    self.last_command = Some(cmd);
+                }
+            }
+            Err(e) => {
+                self.message = Some(format!("Command failed: {}", e));
+            }
+        }
+    }
+
+    pub fn start_external_command(&mut self) {
+        self.input_buffer.clear();
+        self.input_mode = InputMode::ExternalCommand;
     }
 }
