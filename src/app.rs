@@ -68,6 +68,8 @@ pub struct App {
     // External command execution
     pub last_command: Option<String>,
     pub default_command: Option<String>,
+    pub command_history: Vec<String>,
+    pub history_index: Option<usize>,
 }
 
 impl App {
@@ -103,6 +105,8 @@ impl App {
             last_char_time: std::time::Instant::now(),
             last_command: None,
             default_command,
+            command_history: Vec::new(),
+            history_index: None,
         })
     }
 
@@ -365,6 +369,16 @@ impl App {
             }
             InputMode::ExternalCommand => {
                 let command = self.input_buffer.clone();
+                if !command.is_empty() {
+                    // Remove duplicate from history if exists
+                    self.command_history.retain(|c| c != &command);
+                    // Add to end of history
+                    self.command_history.push(command.clone());
+                    // Limit history size to 100 entries
+                    if self.command_history.len() > 100 {
+                        self.command_history.remove(0);
+                    }
+                }
                 self.execute_external_command(Some(command));
             }
             InputMode::Confirm(ConfirmAction::Delete(_)) => {
@@ -1098,6 +1112,45 @@ impl App {
 
     pub fn start_external_command(&mut self) {
         self.input_buffer.clear();
+        self.history_index = None;
         self.input_mode = InputMode::ExternalCommand;
+    }
+
+    pub fn history_prev(&mut self) {
+        if self.command_history.is_empty() {
+            return;
+        }
+
+        let new_index = match self.history_index {
+            None => Some(self.command_history.len() - 1),
+            Some(0) => Some(0), // Already at oldest
+            Some(i) => Some(i - 1),
+        };
+
+        if let Some(idx) = new_index {
+            self.input_buffer = self.command_history[idx].clone();
+            self.history_index = new_index;
+        }
+    }
+
+    pub fn history_next(&mut self) {
+        if self.command_history.is_empty() {
+            return;
+        }
+
+        let new_index = match self.history_index {
+            None => None,
+            Some(i) if i + 1 >= self.command_history.len() => {
+                // Back to empty input
+                self.input_buffer.clear();
+                None
+            }
+            Some(i) => Some(i + 1),
+        };
+
+        if let Some(idx) = new_index {
+            self.input_buffer = self.command_history[idx].clone();
+        }
+        self.history_index = new_index;
     }
 }

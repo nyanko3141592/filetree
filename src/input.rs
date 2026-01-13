@@ -158,6 +158,18 @@ fn handle_input_mode(app: &mut App, key: KeyEvent) {
         KeyCode::Backspace => {
             app.input_buffer.pop();
         }
+        KeyCode::Up => {
+            // History navigation only for ExternalCommand mode
+            if app.input_mode == InputMode::ExternalCommand {
+                app.history_prev();
+            }
+        }
+        KeyCode::Down => {
+            // History navigation only for ExternalCommand mode
+            if app.input_mode == InputMode::ExternalCommand {
+                app.history_next();
+            }
+        }
         KeyCode::Char(c) => {
             app.input_buffer.push(c);
         }
