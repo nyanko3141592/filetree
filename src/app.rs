@@ -1,4 +1,6 @@
 use std::collections::HashSet;
+use std::fs;
+use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 
 use crate::file_ops::{self, Clipboard, ClipboardContent};
@@ -73,10 +75,64 @@ pub struct App {
 }
 
 impl App {
+    fn get_history_file_path() -> Option<PathBuf> {
+        let config_dir = if let Ok(xdg_config) = std::env::var("XDG_CONFIG_HOME") {
+            PathBuf::from(xdg_config).join("filetree")
+        } else if let Ok(home) = std::env::var("HOME") {
+            PathBuf::from(home).join(".config").join("filetree")
+        } else {
+            return None;
+        };
+        Some(config_dir.join("history.txt"))
+    }
+
+    fn load_history() -> Vec<String> {
+        let history_path = match Self::get_history_file_path() {
+            Some(path) => path,
+            None => return Vec::new(),
+        };
+
+        if !history_path.exists() {
+            return Vec::new();
+        }
+
+        match fs::File::open(&history_path) {
+            Ok(file) => {
+                let reader = BufReader::new(file);
+                reader
+                    .lines()
+                    .filter_map(|line| line.ok())
+                    .filter(|line| !line.trim().is_empty())
+                    .collect()
+            }
+            Err(_) => Vec::new(),
+        }
+    }
+
+    fn save_history(&self) {
+        let history_path = match Self::get_history_file_path() {
+            Some(path) => path,
+            None => return,
+        };
+
+        // Create directory if it doesn't exist
+        if let Some(parent) = history_path.parent() {
+            let _ = fs::create_dir_all(parent);
+        }
+
+        // Write history to file
+        if let Ok(mut file) = fs::File::create(&history_path) {
+            for cmd in &self.command_history {
+                let _ = writeln!(file, "{}", cmd);
+            }
+        }
+    }
+
     pub fn new(path: &Path, default_command: Option<String>) -> anyhow::Result<Self> {
         let show_hidden = false;
         let tree = FileTree::new(path, show_hidden)?;
         let git_repo = GitRepo::new(path);
+        let command_history = Self::load_history();
         Ok(Self {
             tree,
             git_repo,
@@ -105,7 +161,7 @@ impl App {
             last_char_time: std::time::Instant::now(),
             last_command: None,
             default_command,
-            command_history: Vec::new(),
+            command_history,
             history_index: None,
         })
     }
@@ -374,10 +430,8 @@ impl App {
                     self.command_history.retain(|c| c != &command);
                     // Add to end of history
                     self.command_history.push(command.clone());
-                    // Limit history size to 100 entries
-                    if self.command_history.len() > 100 {
-                        self.command_history.remove(0);
-                    }
+                    // Save history to file
+                    self.save_history();
                 }
                 self.execute_external_command(Some(command));
             }
