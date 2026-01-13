@@ -19,6 +19,7 @@ A fast, lightweight file explorer TUI with VSCode-like interface and Vim keybind
 - **Path copying** - Copy file path to system clipboard
 - **File icons** - Beautiful icons with Nerd Fonts
 - **Drag & Drop** - Drop files to copy into selected folder
+- **External command execution** - Execute commands on selected files with history support
 
 ## Installation
 
@@ -57,12 +58,28 @@ ft ~/Documents  # Specific directory
 | Key | Action |
 |-----|--------|
 | `↑` / `↓` or `j` / `k` | Move up / down |
-| `→` or `l` / `Enter` | Expand directory |
+| `→` or `l` | Expand directory |
 | `←` or `h` / `Backspace` | Collapse / Go to parent |
 | `g` / `G` | Jump to top / bottom |
 | `Tab` | Toggle expand/collapse |
 | `H` | Collapse all |
 | `L` | Expand all |
+
+### External Commands
+
+| Key | Action |
+|-----|--------|
+| `Enter` | Execute last command (or prompt for command if first time) |
+| `:` | Open command input (use `<filepath>` as placeholder for selected file) |
+| `Shift-Enter` | Open command input (if terminal supports) |
+
+**In command input mode:**
+
+| Key | Action |
+|-----|--------|
+| `↑` / `↓` | Navigate command history |
+| `Enter` | Execute command |
+| `Esc` | Cancel |
 
 ### File Operations
 
@@ -122,6 +139,32 @@ ft ~/Documents  # Specific directory
 | Red | Deleted |
 | Cyan | Renamed |
 | Gray | Ignored |
+
+## External Commands
+
+### Usage
+
+- Press `:` to enter a command, then press `Enter` to execute it
+- Use `<filepath>` in your commands as a placeholder for the selected file path
+- Command history is automatically saved to `~/.config/filetree/history.txt`
+- Navigate command history with `↑` / `↓` keys in command input mode
+
+### Examples
+
+```bash
+# First, start Neovim with remote server enabled
+nvim --listen /tmp/nvimsocket
+
+# In ft, use this command to open files in the remote Neovim instance
+nvim --server /tmp/nvimsocket --remote <filepath>
+```
+
+### Environment Variables
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `FILETREE_DEFAULT_CMD` | Default command to execute on first `Enter` press | `code <filepath>` |
+| `XDG_CONFIG_HOME` | Configuration directory location | `~/.config` (default) |
 
 ## Requirements
 
