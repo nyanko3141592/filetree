@@ -101,7 +101,7 @@ impl App {
                 let reader = BufReader::new(file);
                 reader
                     .lines()
-                    .filter_map(|line| line.ok())
+                    .map_while(Result::ok)
                     .filter(|line| !line.trim().is_empty())
                     .collect()
             }
