@@ -7,6 +7,8 @@ use crate::file_ops::{self, Clipboard, ClipboardContent};
 use crate::file_tree::FileTree;
 use crate::git_status::GitRepo;
 
+const HISTORY_LIMIT: usize = 100;
+
 /// Image pixel data for terminal preview (RGB values)
 #[derive(Clone)]
 pub struct ImagePreview {
@@ -75,6 +77,13 @@ pub struct App {
 }
 
 impl App {
+    fn trim_history(history: &mut Vec<String>) {
+        let excess = history.len().saturating_sub(HISTORY_LIMIT);
+        if excess > 0 {
+            history.drain(0..excess);
+        }
+    }
+
     fn get_history_file_path() -> Option<PathBuf> {
         let config_dir = if let Ok(xdg_config) = std::env::var("XDG_CONFIG_HOME") {
             PathBuf::from(xdg_config).join("filetree")
@@ -99,11 +108,13 @@ impl App {
         match fs::File::open(&history_path) {
             Ok(file) => {
                 let reader = BufReader::new(file);
-                reader
+                let mut history: Vec<String> = reader
                     .lines()
                     .map_while(Result::ok)
                     .filter(|line| !line.trim().is_empty())
-                    .collect()
+                    .collect();
+                Self::trim_history(&mut history);
+                history
             }
             Err(_) => Vec::new(),
         }
@@ -430,6 +441,7 @@ impl App {
                     self.command_history.retain(|c| c != &command);
                     // Add to end of history
                     self.command_history.push(command.clone());
+                    Self::trim_history(&mut self.command_history);
                     // Save history to file
                     self.save_history();
                 }
