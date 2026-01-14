@@ -77,6 +77,10 @@ pub struct App {
 }
 
 impl App {
+    fn shell_quote(filepath: &str) -> String {
+        format!("'{}'", filepath.replace('\'', "'\"'\"'"))
+    }
+
     fn trim_history(history: &mut Vec<String>) {
         let excess = history.len().saturating_sub(HISTORY_LIMIT);
         if excess > 0 {
@@ -1152,7 +1156,7 @@ impl App {
         };
 
         // Replace <filepath> placeholder with actual path (quoted)
-        let command = command_template.replace("<filepath>", &format!("'{}'", filepath));
+        let command = command_template.replace("<filepath>", &Self::shell_quote(&filepath));
 
         // Execute the command with stdout/stderr redirected to null to prevent terminal corruption
         match std::process::Command::new("sh")
