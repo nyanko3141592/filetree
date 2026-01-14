@@ -5,7 +5,11 @@ use crate::app::{App, ConfirmAction, InputMode};
 pub fn handle_key_event(app: &mut App, key: KeyEvent, visible_height: usize) {
     match &app.input_mode {
         InputMode::Normal => handle_normal_mode(app, key),
-        InputMode::Search | InputMode::Rename | InputMode::NewFile | InputMode::NewDir | InputMode::ExternalCommand => {
+        InputMode::Search
+        | InputMode::Rename
+        | InputMode::NewFile
+        | InputMode::NewDir
+        | InputMode::ExternalCommand => {
             handle_input_mode(app, key);
         }
         InputMode::Confirm(_) => handle_confirm_mode(app, key),
