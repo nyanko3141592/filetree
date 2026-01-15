@@ -1,9 +1,13 @@
 use std::collections::HashSet;
+use std::fs;
+use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 
 use crate::file_ops::{self, Clipboard, ClipboardContent};
 use crate::file_tree::FileTree;
 use crate::git_status::GitRepo;
+
+const HISTORY_LIMIT: usize = 100;
 
 /// Image pixel data for terminal preview (RGB values)
 #[derive(Clone)]
@@ -22,6 +26,7 @@ pub enum InputMode {
     NewDir,
     Confirm(ConfirmAction),
     Preview,
+    ExternalCommand,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -64,13 +69,85 @@ pub struct App {
     // Drop detection
     pub drop_buffer: String,
     pub last_char_time: std::time::Instant,
+    // External command execution
+    pub last_command: Option<String>,
+    pub default_command: Option<String>,
+    pub command_history: Vec<String>,
+    pub history_index: Option<usize>,
 }
 
 impl App {
-    pub fn new(path: &Path) -> anyhow::Result<Self> {
+    fn shell_quote(filepath: &str) -> String {
+        format!("'{}'", filepath.replace('\'', "'\"'\"'"))
+    }
+
+    fn trim_history(history: &mut Vec<String>) {
+        let excess = history.len().saturating_sub(HISTORY_LIMIT);
+        if excess > 0 {
+            history.drain(0..excess);
+        }
+    }
+
+    fn get_history_file_path() -> Option<PathBuf> {
+        let config_dir = if let Ok(xdg_config) = std::env::var("XDG_CONFIG_HOME") {
+            PathBuf::from(xdg_config).join("filetree")
+        } else if let Ok(home) = std::env::var("HOME") {
+            PathBuf::from(home).join(".config").join("filetree")
+        } else {
+            return None;
+        };
+        Some(config_dir.join("history.txt"))
+    }
+
+    fn load_history() -> Vec<String> {
+        let history_path = match Self::get_history_file_path() {
+            Some(path) => path,
+            None => return Vec::new(),
+        };
+
+        if !history_path.exists() {
+            return Vec::new();
+        }
+
+        match fs::File::open(&history_path) {
+            Ok(file) => {
+                let reader = BufReader::new(file);
+                let mut history: Vec<String> = reader
+                    .lines()
+                    .map_while(Result::ok)
+                    .filter(|line| !line.trim().is_empty())
+                    .collect();
+                Self::trim_history(&mut history);
+                history
+            }
+            Err(_) => Vec::new(),
+        }
+    }
+
+    fn save_history(&self) {
+        let history_path = match Self::get_history_file_path() {
+            Some(path) => path,
+            None => return,
+        };
+
+        // Create directory if it doesn't exist
+        if let Some(parent) = history_path.parent() {
+            let _ = fs::create_dir_all(parent);
+        }
+
+        // Write history to file
+        if let Ok(mut file) = fs::File::create(&history_path) {
+            for cmd in &self.command_history {
+                let _ = writeln!(file, "{}", cmd);
+            }
+        }
+    }
+
+    pub fn new(path: &Path, default_command: Option<String>) -> anyhow::Result<Self> {
         let show_hidden = false;
         let tree = FileTree::new(path, show_hidden)?;
         let git_repo = GitRepo::new(path);
+        let command_history = Self::load_history();
         Ok(Self {
             tree,
             git_repo,
@@ -97,6 +174,10 @@ impl App {
             quick_preview_image: None,
             drop_buffer: String::new(),
             last_char_time: std::time::Instant::now(),
+            last_command: None,
+            default_command,
+            command_history,
+            history_index: None,
         })
     }
 
@@ -356,6 +437,19 @@ impl App {
                     return;
                 }
                 self.search_next();
+            }
+            InputMode::ExternalCommand => {
+                let command = self.input_buffer.clone();
+                if !command.is_empty() {
+                    // Remove duplicate from history if exists
+                    self.command_history.retain(|c| c != &command);
+                    // Add to end of history
+                    self.command_history.push(command.clone());
+                    Self::trim_history(&mut self.command_history);
+                    // Save history to file
+                    self.save_history();
+                }
+                self.execute_external_command(Some(command));
             }
             InputMode::Confirm(ConfirmAction::Delete(_)) => {
                 self.execute_delete();
@@ -1035,5 +1129,98 @@ impl App {
         }
 
         paths
+    }
+
+    pub fn execute_external_command(&mut self, command_override: Option<String>) {
+        // Determine which command to use
+        let command_template = command_override
+            .as_ref()
+            .or(self.last_command.as_ref())
+            .or(self.default_command.as_ref());
+
+        let command_template = match command_template {
+            Some(cmd) => cmd,
+            None => {
+                self.message = Some("No command available. Enter a command first.".to_string());
+                return;
+            }
+        };
+
+        // Get the selected file path
+        let filepath = match self.tree.get_node(self.selected) {
+            Some(node) => node.path.to_string_lossy().to_string(),
+            None => {
+                self.message = Some("No file selected".to_string());
+                return;
+            }
+        };
+
+        // Replace <filepath> placeholder with actual path (quoted)
+        let command = command_template.replace("<filepath>", &Self::shell_quote(&filepath));
+
+        // Execute the command with stdout/stderr redirected to null to prevent terminal corruption
+        match std::process::Command::new("sh")
+            .arg("-c")
+            .arg(&command)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+        {
+            Ok(_) => {
+                self.message = Some(format!("Executed: {}", command));
+                // Save the command for next time
+                if let Some(cmd) = command_override {
+                    self.last_command = Some(cmd);
+                }
+            }
+            Err(e) => {
+                self.message = Some(format!("Command failed: {}", e));
+            }
+        }
+    }
+
+    pub fn start_external_command(&mut self) {
+        self.input_buffer.clear();
+        self.history_index = None;
+        self.input_mode = InputMode::ExternalCommand;
+    }
+
+    pub fn history_prev(&mut self) {
+        if self.command_history.is_empty() {
+            return;
+        }
+
+        let new_index = match self.history_index {
+            None => Some(self.command_history.len() - 1),
+            Some(0) => Some(0), // Already at oldest
+            Some(i) => Some(i - 1),
+        };
+
+        if let Some(idx) = new_index {
+            self.input_buffer = self.command_history[idx].clone();
+            self.history_index = new_index;
+        }
+    }
+
+    pub fn history_next(&mut self) {
+        if self.command_history.is_empty() {
+            return;
+        }
+
+        let new_index = match self.history_index {
+            None => None,
+            Some(i) if i + 1 >= self.command_history.len() => {
+                // Back to empty input
+                self.input_buffer.clear();
+                None
+            }
+            Some(i) => Some(i + 1),
+        };
+
+        if let Some(idx) = new_index {
+            self.input_buffer = self.command_history[idx].clone();
+        }
+        self.history_index = new_index;
     }
 }

@@ -5,7 +5,11 @@ use crate::app::{App, ConfirmAction, InputMode};
 pub fn handle_key_event(app: &mut App, key: KeyEvent, visible_height: usize) {
     match &app.input_mode {
         InputMode::Normal => handle_normal_mode(app, key),
-        InputMode::Search | InputMode::Rename | InputMode::NewFile | InputMode::NewDir => {
+        InputMode::Search
+        | InputMode::Rename
+        | InputMode::NewFile
+        | InputMode::NewDir
+        | InputMode::ExternalCommand => {
             handle_input_mode(app, key);
         }
         InputMode::Confirm(_) => handle_confirm_mode(app, key),
@@ -41,8 +45,24 @@ fn handle_normal_mode(app: &mut App, key: KeyEvent) {
             app.update_quick_preview();
         }
 
-        // Expand/Collapse
-        KeyCode::Enter | KeyCode::Char('l') | KeyCode::Right => {
+        // Command execution
+        KeyCode::Enter => {
+            if key.modifiers.contains(KeyModifiers::SHIFT) {
+                // Shift-Enter: Always open command input
+                app.start_external_command();
+            } else if app.last_command.is_some() || app.default_command.is_some() {
+                // Enter with existing command: Execute it
+                app.execute_external_command(None);
+            } else {
+                // Enter without command: Open command input (first time)
+                app.start_external_command();
+            }
+        }
+        // Alternative key binding for opening command input (for terminals that don't support Shift-Enter)
+        KeyCode::Char(':') => {
+            app.start_external_command();
+        }
+        KeyCode::Char('l') | KeyCode::Right => {
             app.expand_current();
             app.update_quick_preview();
         }
@@ -96,7 +116,7 @@ fn handle_normal_mode(app: &mut App, key: KeyEvent) {
 
         // Help
         KeyCode::Char('?') => {
-            app.message = Some("o:preview  P:quick  c:path  C:name  y:yank  d:cut  p:paste  D:del  r:rename  a:file  A:dir".to_string());
+            app.message = Some("o:preview  P:quick  c:path  C:name  y:yank  d:cut  p:paste  D:del  r:rename  a:file  A:dir  Enter:cmd  colon:new_cmd".to_string());
         }
 
         // Buffer unknown chars for drop detection
@@ -141,6 +161,18 @@ fn handle_input_mode(app: &mut App, key: KeyEvent) {
         KeyCode::Esc => app.cancel_input(),
         KeyCode::Backspace => {
             app.input_buffer.pop();
+        }
+        KeyCode::Up => {
+            // History navigation only for ExternalCommand mode
+            if app.input_mode == InputMode::ExternalCommand {
+                app.history_prev();
+            }
+        }
+        KeyCode::Down => {
+            // History navigation only for ExternalCommand mode
+            if app.input_mode == InputMode::ExternalCommand {
+                app.history_next();
+            }
         }
         KeyCode::Char(c) => {
             app.input_buffer.push(c);

@@ -32,6 +32,9 @@ fn main() -> Result<()> {
 
     let path = path.canonicalize().unwrap_or(path);
 
+    // Read default command from environment variable
+    let default_command = env::var("FILETREE_DEFAULT_CMD").ok();
+
     // Setup terminal
     enable_raw_mode()?;
     let mut stdout = stdout();
@@ -45,7 +48,7 @@ fn main() -> Result<()> {
     let mut terminal = Terminal::new(backend)?;
 
     // Create app and run
-    let mut app = App::new(&path)?;
+    let mut app = App::new(&path, default_command)?;
     let result = run_app(&mut terminal, &mut app);
 
     // Restore terminal
@@ -57,6 +60,14 @@ fn main() -> Result<()> {
         DisableBracketedPaste
     )?;
     terminal.show_cursor()?;
+
+    // Flush terminal to clear any buffered input
+    terminal.flush()?;
+
+    // Clear any pending events in the input buffer
+    while event::poll(Duration::from_millis(0))? {
+        let _ = event::read()?;
+    }
 
     if let Err(e) = result {
         eprintln!("Error: {}", e);
