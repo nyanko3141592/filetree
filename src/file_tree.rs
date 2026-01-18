@@ -182,12 +182,64 @@ impl FileTree {
     }
 
     pub fn refresh(&mut self) -> anyhow::Result<()> {
+        // Collect expanded paths before refresh
+        let expanded_paths = self.collect_expanded_paths();
+
         let root_path = self.root.path.clone();
         self.root = FileNode::new(root_path, 0);
         self.root.expanded = true;
         self.root.load_children(self.show_hidden)?;
+
+        // Restore expanded state
+        for path in &expanded_paths {
+            Self::restore_expanded_recursive(&mut self.root, path, self.show_hidden);
+        }
+
         self.rebuild_flat_list();
         Ok(())
+    }
+
+    /// Collect all expanded directory paths
+    fn collect_expanded_paths(&self) -> Vec<PathBuf> {
+        let mut paths = Vec::new();
+        Self::collect_expanded_recursive(&self.root, &mut paths);
+        paths
+    }
+
+    fn collect_expanded_recursive(node: &FileNode, paths: &mut Vec<PathBuf>) {
+        if node.is_dir && node.expanded {
+            paths.push(node.path.clone());
+            for child in &node.children {
+                Self::collect_expanded_recursive(child, paths);
+            }
+        }
+    }
+
+    fn restore_expanded_recursive(node: &mut FileNode, target_path: &Path, show_hidden: bool) {
+        if !node.is_dir {
+            return;
+        }
+
+        if node.path == target_path {
+            node.expanded = true;
+            if node.children.is_empty() {
+                let _ = node.load_children(show_hidden);
+            }
+            return;
+        }
+
+        // Check if target_path is under this node
+        if target_path.starts_with(&node.path) {
+            if !node.expanded {
+                node.expanded = true;
+                if node.children.is_empty() {
+                    let _ = node.load_children(show_hidden);
+                }
+            }
+            for child in &mut node.children {
+                Self::restore_expanded_recursive(child, target_path, show_hidden);
+            }
+        }
     }
 
     pub fn set_show_hidden(&mut self, show_hidden: bool) -> anyhow::Result<()> {
