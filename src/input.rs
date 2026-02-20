@@ -114,9 +114,12 @@ fn handle_normal_mode(app: &mut App, key: KeyEvent) {
         KeyCode::Char('o') => app.preview_file(),
         KeyCode::Char('P') => app.toggle_quick_preview(),
 
+        // Open in editor
+        KeyCode::Char('e') => app.open_in_editor(),
+
         // Help
         KeyCode::Char('?') => {
-            app.message = Some("o:preview  P:quick  c:path  C:name  y:yank  d:cut  p:paste  D:del  r:rename  a:file  A:dir  Enter:cmd  colon:new_cmd".to_string());
+            app.message = Some("e:editor  o:preview  P:quick  c:path  C:name  y:yank  d:cut  p:paste  D:del  r:rename  a:file  A:dir  Enter:cmd  colon:new_cmd".to_string());
         }
 
         // Buffer unknown chars for drop detection
