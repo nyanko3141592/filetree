@@ -437,6 +437,8 @@ impl App {
                     return;
                 }
                 self.search_next();
+                // Stay in Search mode so 'n' can continue searching
+                return;
             }
             InputMode::ExternalCommand => {
                 let command = self.input_buffer.clone();
@@ -458,6 +460,11 @@ impl App {
         }
         self.input_mode = InputMode::Normal;
         self.input_buffer.clear();
+    }
+
+    pub fn start_search(&mut self) {
+        self.input_buffer.clear();
+        self.input_mode = InputMode::Search;
     }
 
     pub fn cancel_input(&mut self) {
