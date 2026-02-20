@@ -74,6 +74,8 @@ pub struct App {
     pub default_command: Option<String>,
     pub command_history: Vec<String>,
     pub history_index: Option<usize>,
+    // Pending editor open (path to open, set by open_in_editor, handled in main loop)
+    pub pending_open_editor: Option<String>,
 }
 
 impl App {
@@ -178,6 +180,7 @@ impl App {
             default_command,
             command_history,
             history_index: None,
+            pending_open_editor: None,
         })
     }
 
@@ -1222,5 +1225,26 @@ impl App {
             self.input_buffer = self.command_history[idx].clone();
         }
         self.history_index = new_index;
+    }
+
+    pub fn open_in_editor(&mut self) {
+        let editor = std::env::var("VISUAL")
+            .or_else(|_| std::env::var("EDITOR"))
+            .unwrap_or_default();
+
+        if editor.is_empty() {
+            self.message = Some("No editor set ($VISUAL/$EDITOR)".to_string());
+            return;
+        }
+
+        let filepath = match self.tree.get_node(self.selected) {
+            Some(node) => node.path.to_string_lossy().to_string(),
+            None => {
+                self.message = Some("No file selected".to_string());
+                return;
+            }
+        };
+
+        self.pending_open_editor = Some(format!("{} {}", editor, Self::shell_quote(&filepath)));
     }
 }

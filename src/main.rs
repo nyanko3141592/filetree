@@ -6,7 +6,7 @@ mod input;
 mod ui;
 
 use std::env;
-use std::io::{self, stdout};
+use std::io::{self, stdout, Stdout};
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -76,7 +76,7 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn run_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> io::Result<()> {
+fn run_app(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &mut App) -> io::Result<()> {
     let mut visible_height = 20usize;
 
     loop {
@@ -102,6 +102,35 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> io::Result<
 
         // Check drop buffer timeout
         app.check_drop_buffer();
+
+        // Handle pending editor open
+        if let Some(cmd) = app.pending_open_editor.take() {
+            // Temporarily restore terminal
+            disable_raw_mode()?;
+            execute!(
+                terminal.backend_mut(),
+                LeaveAlternateScreen,
+                DisableMouseCapture,
+                DisableBracketedPaste
+            )?;
+            terminal.show_cursor()?;
+
+            let _ = std::process::Command::new("sh")
+                .arg("-c")
+                .arg(&cmd)
+                .status();
+
+            // Re-setup terminal
+            enable_raw_mode()?;
+            execute!(
+                terminal.backend_mut(),
+                EnterAlternateScreen,
+                EnableMouseCapture,
+                EnableBracketedPaste
+            )?;
+            terminal.clear()?;
+            app.refresh();
+        }
 
         if app.should_quit {
             break;
