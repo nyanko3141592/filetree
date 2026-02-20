@@ -19,6 +19,7 @@ A fast, lightweight file explorer TUI with VSCode-like interface and Vim keybind
 - **Path copying** - Copy file path to system clipboard
 - **File icons** - Beautiful icons with Nerd Fonts
 - **Drag & Drop** - Drop files to copy into selected folder
+- **Editor integration** - Open files in `$VISUAL` / `$EDITOR` with `e`
 - **External command execution** - Execute commands on selected files with history support
 
 ## Installation
@@ -94,6 +95,7 @@ ft ~/Documents  # Specific directory
 | `a` / `A` | New file / directory |
 | `o` | Preview file (full screen) |
 | `P` | Toggle quick preview (files & directory info) |
+| `e` | Open in editor (`$VISUAL` / `$EDITOR`) |
 
 ### View
 
@@ -163,6 +165,8 @@ nvim --server /tmp/nvimsocket --remote <filepath>
 
 | Variable | Description | Example |
 |----------|-------------|---------|
+| `VISUAL` | Preferred editor for `e` key | `nvim`, `code -w` |
+| `EDITOR` | Fallback editor for `e` key (used when `$VISUAL` is unset) | `nano`, `vi` |
 | `FILETREE_DEFAULT_CMD` | Default command to execute on first `Enter` press | `code <filepath>` |
 | `XDG_CONFIG_HOME` | Configuration directory location | `~/.config` (default) |
 
